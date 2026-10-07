@@ -4,6 +4,9 @@ An experimental native ARM64 Rockbox port for the Shanling M3X, running on its
 existing rooted Android system. This is a development source repository,
 not a finished firmware release or a ready-to-install Magisk package.
 
+**AI assistance disclaimer:** This project was written with the help of AI.
+All changes and validation checks were approved by a human.
+
 The port includes a 768×1280 touchscreen interface, hardware-key input, direct
 internal-storage access, battery reporting, DAC routing and filters, software
 volume/balance, and Android display takeover with thermal monitoring and recovery.
