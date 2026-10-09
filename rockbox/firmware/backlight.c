@@ -634,6 +634,15 @@ void backlight_thread(void)
 
             case BACKLIGHT_TMO_CHANGED:
             case BACKLIGHT_ON:
+#if defined(SHANLING_M3X) && !defined(SIMULATOR)
+                /* Media keys and other UI activity may keep working while
+                 * the physical power key has locked the touchscreen. */
+                if (m3x_screen_locked())
+                {
+                    do_backlight_off();
+                    break;
+                }
+#endif
                 backlight_update_state();
                 break;
 

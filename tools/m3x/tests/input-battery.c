@@ -11,8 +11,15 @@ static int capacity;
 static bool capacity_readable = true;
 static bool live_sysfs;
 static int hold_calls;
+static int screen_on_calls, screen_off_calls, poweroff_calls;
+static bool ignore_backlight;
 void panicf(const char *fmt, ...) { (void)fmt; abort(); }
 void backlight_hold_changed(bool held) { (void)held; ++hold_calls; }
+void backlight_on_ignore(bool ignore, int timeout)
+{ assert(timeout == 0); ignore_backlight = ignore; }
+void backlight_on(void) { assert(!ignore_backlight); ++screen_on_calls; }
+void backlight_off(void) { assert(ignore_backlight); ++screen_off_calls; }
+void sys_poweroff(void) { ++poweroff_calls; }
 int touchscreen_to_pixels(int x, int y, int *data)
 {
     *data = (x << 16) | y;
@@ -153,8 +160,8 @@ int main(void)
     assert(read_buttons(0, 0) == BUTTON_VOL_UP);
     event(key_write, EV_KEY, KEY_VOLUMEUP, 0);
     assert(read_buttons(0, 0) == 0);
-    const int codes[] = {KEY_POWER, KEY_VOLUMEDOWN, KEY_PLAYPAUSE, KEY_PREVIOUSSONG, KEY_NEXTSONG};
-    const int masks[] = {BUTTON_POWER, BUTTON_VOL_DOWN, BUTTON_PLAY, BUTTON_LEFT, BUTTON_RIGHT};
+    const int codes[] = {KEY_VOLUMEDOWN, KEY_PLAYPAUSE, KEY_PREVIOUSSONG, KEY_NEXTSONG};
+    const int masks[] = {BUTTON_VOL_DOWN, BUTTON_PLAY, BUTTON_LEFT, BUTTON_RIGHT};
     for (unsigned i = 0; i < sizeof(codes)/sizeof(codes[0]); ++i)
     {
         event(key_write, EV_KEY, codes[i], 1);
@@ -173,6 +180,87 @@ int main(void)
     abs_event(ABS_MT_TRACKING_ID, -1); sync_touch();
     assert(read_buttons(0, 0) == 0);
 
+    /* Short physical power presses toggle touch/screen lock without emitting
+     * a Back/Menu key. Repeats cannot toggle it more than once per press. */
+    contact(0, 57, 0, 0); sync_touch();
+    assert(read_buttons(0, 0) == BUTTON_TOUCHSCREEN);
+    event(key_write, EV_KEY, KEY_POWER, 1);
+    assert(read_buttons(0, 0) == BUTTON_TOUCHSCREEN);
+    event(key_write, EV_KEY, KEY_POWER, 2);
+    assert(read_buttons(0, 0) == BUTTON_TOUCHSCREEN);
+    current_tick += 10;
+    event(key_write, EV_KEY, KEY_POWER, 0);
+    assert(read_buttons(0, 0) == 0);
+    assert(m3x_screen_locked() && ignore_backlight && screen_off_calls == 1);
+
+    /* Pocket touches, including Goodix power gestures, cannot wake/select. */
+    abs_event(ABS_MT_POSITION_X, 720); sync_touch();
+    event(touch_write, EV_KEY, KEY_POWER, 1); sync_touch();
+    event(touch_write, EV_KEY, KEY_POWER, 0); sync_touch();
+    for (int i = 0; i < 3; ++i) assert(read_buttons(0, 0) == 0);
+    assert(m3x_screen_locked() && screen_on_calls == 0);
+
+    /* Music and volume keys remain usable, including held-key repeats. */
+    const int pocket_codes[] = {KEY_VOLUMEUP, KEY_VOLUMEDOWN, KEY_PLAYPAUSE,
+                               KEY_PREVIOUSSONG, KEY_NEXTSONG};
+    const int pocket_masks[] = {BUTTON_VOL_UP, BUTTON_VOL_DOWN, BUTTON_PLAY,
+                               BUTTON_LEFT, BUTTON_RIGHT};
+    for (unsigned i = 0; i < sizeof(pocket_codes)/sizeof(pocket_codes[0]); ++i)
+    {
+        event(key_write, EV_KEY, pocket_codes[i], 1);
+        assert(read_buttons(0, 0) == pocket_masks[i]);
+        event(key_write, EV_KEY, pocket_codes[i], 2);
+        assert(read_buttons(0, 0) == pocket_masks[i]);
+        event(key_write, EV_KEY, pocket_codes[i], 0);
+        assert(read_buttons(0, 0) == 0);
+    }
+    assert(m3x_screen_locked() && screen_on_calls == 0);
+
+    /* Wake with a finger still down: require lift and a fresh contact. */
+    event(key_write, EV_KEY, KEY_POWER, 1); assert(read_buttons(0, 0) == 0);
+    current_tick += 10;
+    event(key_write, EV_KEY, KEY_POWER, 0); assert(read_buttons(0, 0) == 0);
+    assert(!m3x_screen_locked() && !ignore_backlight && screen_on_calls == 1);
+    abs_event(ABS_MT_POSITION_Y, 1280); sync_touch();
+    assert(read_buttons(0, 0) == 0);
+    abs_event(ABS_MT_TRACKING_ID, -1); sync_touch();
+    assert(read_buttons(0, 0) == 0);
+    contact(0, 58, 0, 0); sync_touch();
+    assert(read_buttons(0, 0) == BUTTON_TOUCHSCREEN);
+    abs_event(ABS_MT_TRACKING_ID, -1); sync_touch();
+    assert(read_buttons(0, 0) == 0);
+
+    /* A pre-existing Rockbox touch lock survives a full pocket-mode cycle. */
+    touchscreen_enable_device(false);
+    for (int i = 0; i < 2; ++i)
+    {
+        event(key_write, EV_KEY, KEY_POWER, 1); assert(read_buttons(0, 0) == 0);
+        current_tick += 10;
+        event(key_write, EV_KEY, KEY_POWER, 0); assert(read_buttons(0, 0) == 0);
+    }
+    contact(0, 59, 0, 0); sync_touch();
+    assert(read_buttons(0, 0) == 0);
+    abs_event(ABS_MT_TRACKING_ID, -1); sync_touch();
+    assert(read_buttons(0, 0) == 0);
+    touchscreen_enable_device(true);
+
+    /* Long press requests graceful poweroff exactly once without toggling
+     * the screen, even if Linux sends no repeat events. */
+    int on_before = screen_on_calls, off_before = screen_off_calls;
+    event(key_write, EV_KEY, KEY_POWER, 1); assert(read_buttons(0, 0) == 0);
+    current_tick += 3 * HZ;
+    assert(read_buttons(0, 0) == 0 && poweroff_calls == 1);
+    assert(read_buttons(0, 0) == 0 && poweroff_calls == 1);
+    event(key_write, EV_KEY, KEY_POWER, 0); assert(read_buttons(0, 0) == 0);
+    assert(screen_on_calls == on_before && screen_off_calls == off_before);
+
+    /* Tick wrap does not turn a short press into a shutdown request. */
+    current_tick = -10;
+    event(key_write, EV_KEY, KEY_POWER, 1); assert(read_buttons(0, 0) == 0);
+    current_tick = 5;
+    event(key_write, EV_KEY, KEY_POWER, 0); assert(read_buttons(0, 0) == 0);
+    assert(m3x_screen_locked() && poweroff_calls == 1);
+
     for (capacity = 0; capacity <= 100; ++capacity)
         assert(_battery_level() == capacity);
     capacity = -1; assert(_battery_level() == -1);
@@ -185,7 +273,7 @@ int main(void)
     assert(_battery_level() == actual);
     printf("PASS: input routing, touch frames, multitouch, keys, gauge validation; live battery %d%%\n", actual);
 #else
-    puts("PASS: offline input routing, touch frames, multitouch, queued keys, gauge validation");
+    puts("PASS: input/touch routing, pocket lock, media keys, power hold, gauge validation");
 #endif
     return 0;
 }

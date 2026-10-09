@@ -745,6 +745,12 @@ static int get_click_location(struct gui_synclist *list, int x, int y)
 
     if (viewport_point_within_vp(parent, x, y))
     {
+        /* Skinned rows do not populate the built-in title/scrollbar geometry. */
+        int item;
+        if (skinlist_get_item(&screens[screen], list,
+                             x - parent->x, y - parent->y, &item))
+            return LIST_TEXT;
+
         /* see if the title was clicked */
         if (viewport_point_within_vp(title, x, y))
             retval = TITLE_TEXT;

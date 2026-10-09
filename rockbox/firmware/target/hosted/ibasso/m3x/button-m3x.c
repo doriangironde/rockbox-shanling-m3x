@@ -16,6 +16,9 @@
 #include "config.h"
 #include "button.h"
 #include "button-ibasso.h"
+#include "backlight.h"
+#include "tick.h"
+#include "powermgmt.h"
 
 #define M3X_TOUCH_SLOTS 10
 
@@ -28,6 +31,16 @@ static int primary_slot = -1;
 static bool suppress_contacts;
 static bool dropped;
 static bool touch_enabled = true;
+static bool screen_locked;
+static bool power_pressed, poweroff_requested;
+static unsigned long power_pressed_at;
+
+#define M3X_POWEROFF_TICKS (3 * HZ)
+
+bool m3x_screen_locked(void)
+{
+    return __atomic_load_n(&screen_locked, __ATOMIC_RELAXED);
+}
 
 static int scale_axis(int value, int maximum, int pixels)
 {
@@ -52,6 +65,35 @@ void touchscreen_enable_device(bool enable)
         suppress_contacts |= slots[i].active;
 }
 
+static void toggle_screen_lock(void)
+{
+    bool locked = !m3x_screen_locked();
+    __atomic_store_n(&screen_locked, locked, __ATOMIC_RELAXED);
+    release_touch();
+    /* A finger resting on the panel must lift before it can select anything
+     * after waking, independently of Rockbox's own software touch lock. */
+    suppress_contacts = false;
+    for (int i = 0; i < M3X_TOUCH_SLOTS; ++i)
+        suppress_contacts |= slots[i].active;
+    backlight_on_ignore(locked, 0);
+    if (locked)
+        backlight_off();
+    else
+        backlight_on();
+}
+
+int m3x_button_read_filter(int buttons)
+{
+    /* Poll the hold duration even when Linux sends no autorepeat events. */
+    if (power_pressed && !poweroff_requested &&
+        (unsigned long)current_tick - power_pressed_at >= M3X_POWEROFF_TICKS)
+    {
+        poweroff_requested = true;
+        sys_poweroff();
+    }
+    return buttons;
+}
+
 /* Publish complete frames. Never transfer a held selection to a second finger. */
 static void report_touch(void)
 {
@@ -67,7 +109,7 @@ static void report_touch(void)
     }
     if (!any_active)
         suppress_contacts = false;
-    if (!touch_enabled)
+    if (!touch_enabled || m3x_screen_locked())
         return;
     if (primary_slot < 0 && !suppress_contacts)
     {
@@ -92,10 +134,28 @@ static void report_touch(void)
 
 int handle_button_event(__u16 code, __s32 value, int last_btns)
 {
+    if (code == KEY_POWER)
+    {
+        if (value == 1 && !power_pressed)
+        {
+            power_pressed = true;
+            poweroff_requested = false;
+            power_pressed_at = (unsigned long)current_tick;
+        }
+        else if (value == 0 && power_pressed)
+        {
+            m3x_button_read_filter(last_btns);
+            if (!poweroff_requested &&
+                (unsigned long)current_tick - power_pressed_at < M3X_POWEROFF_TICKS)
+                toggle_screen_lock();
+            power_pressed = false;
+        }
+        /* Power is a screen/shutdown control, never a Back/Menu action. */
+        return last_btns;
+    }
     int button;
     switch (code)
     {
-        case KEY_POWER:        button = BUTTON_POWER; break;
         case KEY_VOLUMEUP:     button = BUTTON_VOL_UP; break;
         case KEY_VOLUMEDOWN:   button = BUTTON_VOL_DOWN; break;
         case KEY_PLAYPAUSE:    button = BUTTON_PLAY; break;
@@ -112,8 +172,12 @@ int handle_button_event(__u16 code, __s32 value, int last_btns)
 
 bool handle_touchscreen_target_event(__u16 type, __u16 code, __s32 value)
 {
+    /* Goodix gesture-generated power events must not unlock a pocket. Only
+     * the physical power key on qpnp_pon may toggle the screen. */
+    if (type == EV_KEY && code == KEY_POWER)
+        return true;
     if (type != EV_ABS && type != EV_SYN)
-        return false; /* Goodix also reports KEY_POWER. */
+        return false;
     if (type == EV_SYN)
     {
         if (code == SYN_DROPPED)

@@ -1,0 +1,49 @@
+# Full-screen M3X iPod-style now-playing screen.
+%wd
+%X(playing-screen.bmp)
+%Fl(2,27-Adobe-Helvetica.fnt)
+%Fl(3,27-Adobe-Helvetica-Bold.fnt)
+%Fl(4,35-Adobe-Helvetica.fnt)
+%Fl(5,35-Adobe-Helvetica-Bold.fnt)
+%V(0,0,768,1280,2)
+%T(0,56,144,80,menu)
+%T(70,1056,180,144,wps_prev)
+%T(70,1056,180,144,rwd,repeat_press)
+%T(294,1056,180,144,play)
+%T(518,1056,180,144,wps_next)
+%T(518,1056,180,144,ffwd,repeat_press)
+%V(24,12,200,36,2)%Vf(202020)%Vb(ECECEC)
+%?cc<%cH:%cM|Rockbox>
+%V(626,12,112,36,2)%Vf(202020)%Vb(ECECEC)
+%ar%bl%%
+%V(156,80,456,48,5)%Vf(202020)%Vb(DDDDDD)
+%acNow Playing
+%V(24,84,120,44,2)%Vf(444444)%Vb(DDDDDD)
+Home
+%V(156,180,456,456,2)
+%xl(cover,no-cover.bmp,0,0)
+%Cl(0,0,456,456,c,c)
+%?C<%Cd|%xd(cover)>
+%V(48,694,672,16,2)%Vf(777777)%Vb(CBCBCB)
+%pb(0,0,672,12,progress.bmp)
+%T(0,0,672,16,progressbar)
+%V(48,724,672,40,2)%Vf(333333)%Vb(EEEEEE)
+%pc%ar-%pr
+%V(40,802,688,52,5)%Vf(202020)%Vb(EEEEEE)
+%s%ac%?it<%it|%fn>
+%V(40,868,688,44,4)%Vf(444444)%Vb(EEEEEE)
+%s%ac%?ia<%ia|Unknown artist>
+%V(40,924,688,40,2)%Vf(666666)%Vb(EEEEEE)
+%s%ac%?id<%id|Music>
+%V(110,1082,100,90,2)
+%xl(prev,previous.bmp,0,0)
+%xd(prev)
+%V(334,1082,100,90,2)
+%xl(play,play.bmp,0,0)
+%xl(pause,pause.bmp,0,0)
+%?mp<%xd(play)|%xd(pause)|%xd(play)|%xd(pause)|%xd(pause)|%xd(play)>
+%V(558,1082,100,90,2)
+%xl(next,next.bmp,0,0)
+%xd(next)
+%V(40,1220,688,36,2)%Vf(777777)%Vb(E6E6E6)
+%ac%pp of %pe

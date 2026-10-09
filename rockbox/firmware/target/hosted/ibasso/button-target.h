@@ -38,6 +38,12 @@
 #define BUTTON_MAIN (  BUTTON_LEFT  | BUTTON_VOL_UP | BUTTON_VOL_DOWN  | BUTTON_RIGHT \
                      | BUTTON_PLAY  | BUTTON_POWER  | BUTTON_POWER_LONG)
 
+#ifdef SHANLING_M3X
+#include <stdbool.h>
+bool m3x_screen_locked(void);
+int m3x_button_read_filter(int buttons);
+#endif
+
 
 #define STATE_SPDIF_UNPLUGGED   32
 #define STATE_LINEOUT_UNPLUGGED 64

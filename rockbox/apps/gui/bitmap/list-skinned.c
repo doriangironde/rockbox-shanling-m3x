@@ -192,6 +192,10 @@ bool skinlist_draw(struct screen *display, struct gui_synclist *list)
     if (!skinlist_is_configured(screen, list))
         return false;
 
+    /* Swipe distances use the skin's row height, rather than the UI font. */
+    if (!listcfg[screen]->tile)
+        list->line_height[screen] = listcfg[screen]->height;
+
     current_list = list;
     wps.display = display;
     wps.data = listcfg[screen]->data;
@@ -235,6 +239,20 @@ bool skinlist_draw(struct screen *display, struct gui_synclist *list)
             }
             original_x = skin_viewport->vp.x;
             original_y = skin_viewport->vp.y;
+#if LCD_DEPTH > 1
+            /* Row backgrounds must reach the backdrop too, so later text
+             * and transparent icons restore the row rather than the page. */
+            if (skin_viewport->output_to_backdrop_buffer)
+            {
+                skin_backdrop_set_buffer(wps.data->backdrop_id, skin_viewport);
+                skin_backdrop_show(-1);
+            }
+            else
+            {
+                skin_backdrop_set_buffer(-1, skin_viewport);
+                skin_backdrop_show(wps.data->backdrop_id);
+            }
+#endif
             if (listcfg[screen]->tile)
             {
                 int cols = (parent->width / listcfg[screen]->width);
@@ -270,6 +288,15 @@ bool skinlist_draw(struct screen *display, struct gui_synclist *list)
                 skin_render_viewport(SKINOFFSETTOPTR(get_skin_buffer(wps.data), (intptr_t)children[0]),
                                      &wps, skin_viewport, SKIN_REFRESH_ALL);
             wps_display_images(&wps, &skin_viewport->vp);
+#if LCD_DEPTH > 1
+            skin_backdrop_set_buffer(-1, skin_viewport);
+            skin_backdrop_show(wps.data->backdrop_id);
+            if (skin_viewport->output_to_backdrop_buffer)
+            {
+                display->set_viewport(&skin_viewport->vp);
+                display->clear_viewport();
+            }
+#endif
             /* force disableing scroll because it breaks later */
             if (!is_selected)
             {

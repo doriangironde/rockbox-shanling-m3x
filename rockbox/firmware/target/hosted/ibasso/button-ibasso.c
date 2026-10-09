@@ -418,6 +418,10 @@ int button_read_device(int *data)
     */
     int touch = touchscreen_to_pixels(_last_x, _last_y, data);
 
+#ifdef SHANLING_M3X
+    return m3x_button_read_filter(_last_btns |
+        (_last_touch_state == TOUCHSCREEN_STATE_DOWN ? touch : BUTTON_NONE));
+#else
     if(_last_touch_state == TOUCHSCREEN_STATE_DOWN)
     {
         return _last_btns | touch;
@@ -426,6 +430,7 @@ int button_read_device(int *data)
     /*DEBUGF("DEBUG %s: _last_btns: %#8.8x.", __func__, _last_btns);*/
 
     return _last_btns;
+#endif
 }
 
 

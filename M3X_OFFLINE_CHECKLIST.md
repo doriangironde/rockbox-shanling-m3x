@@ -54,6 +54,35 @@ disabled. The error handler also copies its message before releasing the PCM
 lock, preventing a concurrent handle replacement from invalidating the text;
 the nine native-driver replays and ARM64 build passed again after that change.
 
+## Pocket controls and iPod-style theme — 2026-10-09
+
+The user confirmed the bounded pocket-mode test passed: short physical power
+turns off the screen and locks touch, touch/gestures do not wake it, physical
+music and volume controls remain usable, and short power wakes it normally.
+The observer recorded backlight zero while the PCM stream kept advancing.
+CPU sensor0 was 39–41 C and battery 29.7–30.5 C during this short USB-connected
+run; Android restoration was verified afterward. The CPU reached 48 C during
+framework restoration. A three-second power hold is covered by replays, but
+actual hardware shutdown and sustained screen-off power use remain untested.
+
+The new `m3x-ipod` native theme has full-screen silver headers, light list rows,
+blue selection, dark icons/chevrons and centred artwork with onscreen playback
+controls, Back and Home. It has no click wheel. Original bitmap artwork and
+regeneration tooling are included. Clock text falls back to "Rockbox" when the
+target has no RTC support. Existing Rockbox lists and database structure remain.
+
+Simulator verification exercises menu taps, a 25-song list and swipe, decoded
+MP3 audio, pause/resume and Home. Seven 768×1280 captures were inspected, the
+existing simulator playback check also passed, and all 24 host tests passed.
+The ARM64 build and 56-module package check passed. Skinned rows now honor
+backdrop drawing, touch hit-testing and their configured scrolling height;
+these fixes leave the built-in list path available for other themes.
+The theme was installed with a backup and the user's -60 dB setting preserved.
+A real-device framebuffer capture confirms the menu layout and blue colors;
+human confirmation of the new playback touch controls is pending. This menu
+run completed with CPU sensor0 at 40–41 C and battery 30.7–31.5 C; Android
+restoration was verified. The observer recorded no playback in this run.
+
 ## Artifacts and commands
 
 - ARM64 player: `build-m3x/rockbox`

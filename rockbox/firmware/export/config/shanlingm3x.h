@@ -102,9 +102,9 @@
 #define CONFIG_BACKLIGHT_FADING BACKLIGHT_FADING_SW_SETTING
 
 /*
-    A DAP should not blank its own screen while idle, and this target's
-    lcd_sleep() puts the whole system into /sys/power/state "mem".
-    0 == "backlight always on".
+    Keep automatic timeout disabled by default. A short physical power press
+    explicitly turns off the backlight and locks touch while media keys work.
+    The M3X lcd_sleep() never requests whole-system suspend.
 */
 #define DEFAULT_BACKLIGHT_TIMEOUT 0
 

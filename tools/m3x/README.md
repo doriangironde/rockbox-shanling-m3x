@@ -221,6 +221,28 @@ reproduces the old starvation and checks bounded control latency, nested
 callbacks and safe concurrent sample-rate changes. The user confirmed prompt
 volume changes and clean sound on the M3X after the fix.
 
+## Pocket-mode input and display
+
+A short physical power press toggles a native M3X screen/touch lock in the
+input driver. It is consumed before application and plugin keymaps, so it
+works from menus as well as playback. Goodix-generated KEY_POWER gestures
+cannot toggle it. Music and volume keys retain their normal mappings.
+Unlock suppresses existing contacts until all fingers lift and does not
+change Rockbox's independent software touch-lock state.
+
+The backlight worker rejects wake requests while this lock is active,
+including requests from UI activity and selective-backlight settings. The
+backlight is set to zero and framebuffer updates are disabled; no framebuffer
+blank ioctl or `/sys/power/state` suspend request is used. The launcher's
+suspend blocker stays held so audio continues. Holding physical power for
+three seconds posts the existing graceful shutdown request, once per hold,
+without depending on Linux autorepeat.
+
+The input replay covers locking with a held finger, pocket touches and wake
+gestures, media/volume buttons, unlock contact suppression, independent touch
+lock, power repeats, long holds and tick wrap. On-device screen-off/playback
+results are recorded in the root checklist.
+
 ## Offline development and simulator
 
 `sh tools/m3x/verify-offline.sh` builds the ARM64 player, runs the host gates,

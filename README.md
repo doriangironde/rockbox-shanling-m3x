@@ -35,6 +35,43 @@ playback, unplugged battery life, balanced output, absolute volume calibration,
 filters/rate transitions, suspend and microSD mounting still need validation.
 See [the full checklist](M3X_OFFLINE_CHECKLIST.md).
 
+## Screen off and pocket controls
+
+In the native M3X build, briefly press the physical power button to turn off
+the backlight and lock touch. Music keeps playing, and the physical volume,
+play/pause and previous/next buttons remain usable without lighting the screen.
+Briefly press power again to wake it. Lift any finger resting on the screen
+before touching again. Touchscreen wake gestures do not unlock pocket mode.
+
+Holding power for three seconds requests normal Rockbox shutdown; the hold
+logic is covered by input replays, with physical shutdown validation pending.
+This screen-off mode leaves Linux running. Whole-system suspend remains
+disabled because the previous display suspend path failed to wake reliably.
+
+## iPod-style theme
+
+The included `m3x-ipod` theme uses the full 768×1280 screen: silver headers,
+light menu rows, blue selection, dark icons and chevrons, centred album art,
+and large previous/play-pause/next touch controls. There is no click wheel.
+The lists keep Rockbox's real menu contents and database browsing; album and
+artist thumbnail grids from the design reference are not implemented.
+
+![Simulator preview of the M3X iPod-style menu, settings and playback screen](docs/images/m3x-ipod-preview.png)
+
+Choose **Settings → Theme Settings → Browse Themes → m3x-ipod** after installing
+a matching native player and assets. Tap **Back** in submenus and **Home** at
+the top left of Now Playing to return to the main menu while music continues.
+Physical power still controls pocket mode, and music/volume keys keep working.
+Tracks without artwork show a neutral music-note placeholder.
+
+The original artwork and native `.sbs`/`.wps` files are included in the source.
+To regenerate them, install Pillow and run
+`python3 tools/m3x/make-ipod-classic-theme.py`, then rebuild the assets with
+`make -C build-m3x zip`. On macOS, with the M3X simulator built, SDL2/pkg-config and Pillow
+installed, `python3 tools/m3x/preview-ipod-theme.py` checks menu taps, a scrolling
+25-song list, playback, pause/resume and Home in an isolated temporary disk.
+Audio is captured to a file, with no audible simulator playback.
+
 ## Repository layout
 
 - `rockbox/`: complete upstream source snapshot plus the M3X target and assets.

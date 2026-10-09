@@ -225,9 +225,9 @@ void lcd_sleep(void)
         this hardware, the panel never comes back - the screen stays black even
         for Android afterwards, until the device is rebooted.
 
-        Rockbox's backlight timeout is set to "always on" for this target
-        (DEFAULT_BACKLIGHT_TIMEOUT 0), so lcd_sleep() is not reached during
-        normal use anyway; the backlight is dimmed instead.
+        Pocket mode turns off the backlight and disables framebuffer updates
+        through lcd_enable(false), leaving the display pipeline available to
+        wake again. Audio continues under the launcher's suspend blocker.
     */
 #else
     /*
