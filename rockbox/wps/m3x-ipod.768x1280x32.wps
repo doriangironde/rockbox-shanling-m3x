@@ -13,7 +13,7 @@
 %T(518,1056,180,144,wps_next)
 %T(518,1056,180,144,ffwd,repeat_press)
 %V(24,12,200,36,2)%Vf(202020)%Vb(ECECEC)
-%?cc<%cH:%cM|Rockbox>
+Rockbox
 %V(626,12,112,36,2)%Vf(202020)%Vb(ECECEC)
 %ar%bl%%
 %V(156,80,456,48,5)%Vf(202020)%Vb(DDDDDD)

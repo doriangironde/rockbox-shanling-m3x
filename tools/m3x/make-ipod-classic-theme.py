@@ -50,11 +50,11 @@ def icon(index, color):
     if index in (0,22):
         line([(21,34),(21,12),(37,8),(37,30)],4); line([(21,12),(37,8)],7)
         ellipse((9,29,23,39)); ellipse((25,25,39,35))
-    elif index in (1,20,29): poly([(5,12),(20,12),(24,17),(43,17),(43,38),(5,38)])
+    elif index in (1,29): poly([(5,12),(20,12),(24,17),(43,17),(43,38),(5,38)])
     elif index in (2,10,12,15):
         for y in (12,24,36): ellipse((5,y-2,9,y+2)); line([(16,y),(42,y)],3)
     elif index in (4,25): poly([(13,7),(13,41),(40,24)])
-    elif index in (8,17,19,23,24,31):
+    elif index in (8,17,19,20,23,24,31):
         ellipse((12,12,36,36))
         for angle in range(0,360,45):
             a=math.radians(angle); line([(24+13*math.cos(a),24+13*math.sin(a)),(24+20*math.cos(a),24+20*math.sin(a))],6)
@@ -104,7 +104,7 @@ FONTS='''%Fl(2,27-Adobe-Helvetica.fnt)
 %Fl(5,35-Adobe-Helvetica-Bold.fnt)
 '''
 STATUS='''%V(24,12,200,36,2)%Vf(202020)%Vb(ECECEC)
-%?cc<%cH:%cM|Rockbox>
+Rockbox
 %V(626,12,112,36,2)%Vf(202020)%Vb(ECECEC)
 %ar%bl%%
 '''

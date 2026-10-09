@@ -68,8 +68,8 @@ actual hardware shutdown and sustained screen-off power use remain untested.
 The new `m3x-ipod` native theme has full-screen silver headers, light list rows,
 blue selection, dark icons/chevrons and centred artwork with onscreen playback
 controls, Back and Home. It has no click wheel. Original bitmap artwork and
-regeneration tooling are included. Clock text falls back to "Rockbox" when the
-target has no RTC support. Existing Rockbox lists and database structure remain.
+regeneration tooling are included. The top bar shows Rockbox branding and
+battery level. Existing Rockbox lists and database structure remain.
 
 Simulator verification exercises menu taps, a 25-song list and swipe, decoded
 MP3 audio, pause/resume and Home. Seven 768×1280 captures were inspected, the
