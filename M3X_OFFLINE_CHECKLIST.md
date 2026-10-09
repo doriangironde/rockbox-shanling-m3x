@@ -79,9 +79,27 @@ backdrop drawing, touch hit-testing and their configured scrolling height;
 these fixes leave the built-in list path available for other themes.
 The theme was installed with a backup and the user's -60 dB setting preserved.
 A real-device framebuffer capture confirms the menu layout and blue colors;
-human confirmation of the new playback touch controls is pending. This menu
+a subsequent album test confirmed the correct artwork, metadata, clean sound,
+onscreen Next, pause/resume and Home while music continues. The initial menu
 run completed with CPU sensor0 at 40–41 C and battery 30.7–31.5 C; Android
-restoration was verified. The observer recorded no playback in this run.
+restoration was verified. The observer recorded no playback in that menu run.
+
+## Real FLAC album and artwork test — 2026-10-09
+
+A six-track album of 24-bit/48 kHz stereo FLAC sources, with both embedded
+600×600 JPEG artwork and a 3000×3000 `cover.jpg`, was copied to the player.
+All six tracks and the cover were read back and SHA-256 matched. The user
+confirmed correct artwork and track metadata, clean sound, onscreen Next,
+pause/resume, and Home returning to the menu without stopping music. A native
+framebuffer capture confirms the artwork and metadata on track 3 of 6.
+The trace shows advancing PCM at 48 kHz, stereo S16_LE; decoding 24-bit sources
+does not imply 24-bit hardware output. The simulator also decoded FLAC and
+rendered the artwork successfully. This does not establish uninterrupted
+playback of every track or all sample-rate transitions. Album media and device
+captures remain private and are not included in this repository.
+
+The bounded album run held CPU sensor0 at 41–42 C and battery at 30.7–31.5 C.
+Android recovery was verified afterward; boot autostart remains disabled.
 
 ## Artifacts and commands
 

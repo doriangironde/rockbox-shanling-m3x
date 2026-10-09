@@ -19,6 +19,11 @@ The M3X has now passed bounded native menu and MP3 playback tests. Touch and
 physical controls respond, playlist-control paths work, and clean sound through
 3.5 mm headphones with prompt volume response was confirmed by the user.
 
+A later album test also confirmed clean playback of 24-bit/48 kHz FLAC sources
+through the current 16-bit PCM output, correct cover art and metadata, and the
+new theme's onscreen Next, pause/resume and Home controls. Music continues when
+Home opens the main menu.
+
 Device testing found that S32_LE passed open-only checks but failed at DSP
 preparation. The player now uses a matched S16_LE stream and software-volume
 output, validates preparation, and exits to Android recovery on unrecoverable
