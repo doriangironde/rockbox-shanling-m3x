@@ -150,7 +150,7 @@ static int show_caps(unsigned int dev)
 
 /* Single open attempt, printing the driver's error. Silent. */
 static int try_open(unsigned dev, unsigned rate, unsigned ch, unsigned fmt,
-                    unsigned period, unsigned count)
+                    unsigned period, unsigned count, bool prepare)
 {
     struct pcm_config cfg;
     struct pcm *p;
@@ -172,6 +172,13 @@ static int try_open(unsigned dev, unsigned rate, unsigned ch, unsigned fmt,
         printf("card0 dev%u OK: rate=%u ch=%u fmt=%u period=%u count=%u -> buffer=%u frames (%u bytes)\n",
                dev, rate, ch, fmt, period, count,
                pcm_get_buffer_size(p), pcm_frames_to_bytes(p, pcm_get_buffer_size(p)));
+        if (prepare) {
+            int rc = pcm_prepare(p);
+            printf("card0 dev%u prepare: %s%s\n", dev, rc ? "FAILED: " : "OK",
+                   rc ? pcm_get_error(p) : " (no samples written or stream started)");
+            pcm_close(p);
+            return rc ? 1 : 0;
+        }
         pcm_close(p);
         return 0;
     }
@@ -423,6 +430,7 @@ int main(int argc, char **argv)
             "  m3xtest sweep <name> [lo] [hi]     map sent->applied values\n"
             "  m3xtest caps <dev>                PCM capabilities\n"
             "  m3xtest open <dev> [rate] [ch] [fmt] [period] [count]  single silent open\n"
+            "  m3xtest prepare ...               open + prepare, no stream start or samples\n"
             "  m3xtest probe <dev> [rate] [ch] [fmt] [bits]   try period/count matrix (silent)\n"
             "  m3xtest route [dev] [rate] [ch] [fmt] [period] [count]\n"
             "        set the whole AK4497 route AND open the PCM in one process,\n"
@@ -440,14 +448,15 @@ int main(int argc, char **argv)
         return sweep_ctl(argv[2], (argc > 3) ? (unsigned)atoi(argv[3]) : 0u,
                                   (argc > 4) ? (unsigned)atoi(argv[4]) : 255u);
     if (!strcmp(argv[1], "caps"))   return show_caps((unsigned)atoi(argv[2]));
-    if (!strcmp(argv[1], "open")) {
+    if (!strcmp(argv[1], "open") || !strcmp(argv[1], "prepare")) {
         unsigned dev    = (argc > 2) ? (unsigned)atoi(argv[2]) : 0;
         unsigned rate   = (argc > 3) ? (unsigned)atoi(argv[3]) : 44100;
         unsigned ch     = (argc > 4) ? (unsigned)atoi(argv[4]) : 2;
         unsigned fmt    = (argc > 5) ? (unsigned)atoi(argv[5]) : 1;
         unsigned period = (argc > 6) ? (unsigned)atoi(argv[6]) : 1024;
         unsigned count  = (argc > 7) ? (unsigned)atoi(argv[7]) : 4;
-        return try_open(dev, rate, ch, fmt, period, count);
+        return try_open(dev, rate, ch, fmt, period, count,
+                        !strcmp(argv[1], "prepare"));
     }
     if (!strcmp(argv[1], "route") || !strcmp(argv[1], "route2")) {
         unsigned dev    = (argc > 2) ? (unsigned)atoi(argv[2]) : 0;

@@ -111,9 +111,9 @@
 #define HAVE_SW_TONE_CONTROLS
 #define HAVE_SW_VOLUME_CONTROL
 #ifndef SIMULATOR
-/* tinyalsa uses S32_LE; expand the mixer samples before sending them. */
-#define PCM_NATIVE_BITDEPTH 32
-/* Avoid a signed left shift when scaling negative samples to 32 bits. */
+/* The vendor DSP accepts S32_LE hw_params but rejects PREPARE. S16_LE
+ * prepares successfully; keep the software output and ALSA stream aligned. */
+#define PCM_NATIVE_BITDEPTH 16
 #define PCM_SW_VOLUME_FRACBITS 16
 #endif
 #define HW_SAMPR_CAPS SAMPR_CAP_ALL_192

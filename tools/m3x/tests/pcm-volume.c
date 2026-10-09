@@ -24,22 +24,22 @@ enum pcm_dma_status pcm_play_dma_status_callback(enum pcm_dma_status s)
 int main(void)
 {
     const int16_t input[] = {32767, -32768, 12345, -12345, 1, -1, 0, 0};
-    struct { int32_t before, samples[8], after; } output = {123, {0}, 456};
+    struct { int16_t before, samples[8], after; } output = {123, {0}, 456};
     pcm_set_master_volume(0, 0); pcm_sync_pcm_factors();
     pcm_sw_volume_copy_buffer(output.samples, input, sizeof(input));
-    for (int i = 0; i < 8; ++i) assert(output.samples[i] == (int32_t)input[i] * 65536);
+    for (int i = 0; i < 8; ++i) assert(output.samples[i] == input[i]);
     assert(output.before == 123 && output.after == 456);
     pcm_set_master_volume(-60, -120); pcm_sync_pcm_factors();
     pcm_sw_volume_copy_buffer(output.samples, input, sizeof(input));
     /* -6 dB and -12 dB should be near half and quarter amplitude. */
-    assert(output.samples[0] > 1060000000 && output.samples[0] < 1090000000);
-    assert(output.samples[1] < -530000000 && output.samples[1] > -550000000);
+    assert(output.samples[0] > 16200 && output.samples[0] < 16600);
+    assert(output.samples[1] < -8100 && output.samples[1] > -8400);
     pcm_new_factor_l = PCM_FACTOR_UNITY / 2;
     pcm_new_factor_r = 0;
     pcm_sync_pcm_factors();
     pcm_sw_volume_copy_buffer(output.samples, input, sizeof(input));
     for (int i = 0; i < 8; i += 2) {
-        assert(output.samples[i] == (int32_t)input[i] * 32768);
+        assert(abs(output.samples[i] - input[i] / 2) <= 1);
         assert(output.samples[i + 1] == 0);
     }
     pcm_set_master_volume(PCM_MUTE_LEVEL, PCM_MUTE_LEVEL); pcm_sync_pcm_factors();
@@ -47,10 +47,10 @@ int main(void)
     for (int i = 0; i < 8; ++i) assert(output.samples[i] == 0);
 
     pcm_set_master_volume(0, 0);
-    /* The PCM core supplies the expanded byte count to its volume adapter. */
-    pcm_play_dma_start_int_swvol(input, sizeof(input) * 2);
-    assert(submitted && submitted_bytes == sizeof(input) * 2);
-    const int32_t *samples = submitted;
-    for (int i = 0; i < 8; ++i) assert(samples[i] == (int32_t)input[i] * 65536);
+    /* The hardware stream uses the original interleaved 16-bit frame size. */
+    pcm_play_dma_start_int_swvol(input, sizeof(input));
+    assert(submitted && submitted_bytes == sizeof(input));
+    const int16_t *samples = submitted;
+    for (int i = 0; i < 8; ++i) assert(samples[i] == input[i]);
     return 0;
 }

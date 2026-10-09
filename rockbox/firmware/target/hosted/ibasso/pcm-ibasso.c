@@ -42,6 +42,7 @@
 #include "sysfs-ibasso.h"
 
 #ifdef SHANLING_M3X
+#include <stdio.h>
 #include "audiohw-m3x.h"
 #endif
 
@@ -67,6 +68,12 @@ static const void  *_pcm_buffer = NULL;
 static volatile sig_atomic_t _dma_stopped = 1;
 static volatile sig_atomic_t _dma_locked  = 1;
 
+#ifdef SHANLING_M3X
+/* Android's mutex can let the writing thread reacquire ahead of UI waiters.
+ * Publish a pending control request before waiting for the write lock. */
+static unsigned int _dma_control_waiters;
+#endif
+
 
 /* Mutex for PCM thread suspend/unsuspend. */
 static pthread_mutex_t _dma_suspended_mtx = PTHREAD_MUTEX_INITIALIZER;
@@ -85,7 +92,11 @@ static void* pcm_thread_run(void* nothing)
     while(true)
     {
         pthread_mutex_lock(&_dma_suspended_mtx);
-        while((_dma_stopped == 1) || (_dma_locked == 1))
+        while((_dma_stopped == 1) || (_dma_locked == 1)
+#ifdef SHANLING_M3X
+              || __atomic_load_n(&_dma_control_waiters, __ATOMIC_RELAXED) != 0
+#endif
+             )
         {
             DEBUGF("DEBUG %s: Playback suspended.", __func__);
             pthread_cond_wait(&_dma_suspended_cond, &_dma_suspended_mtx);
@@ -111,11 +122,22 @@ static void* pcm_thread_run(void* nothing)
         pcm_play_dma_status_callback(PCM_DMAST_STARTED);
 
         /* This relies on Rockbox PCM frame buffer size == ALSA PCM frame buffer size. */
-        if(pcm_write(_alsa_handle, _pcm_buffer, _pcm_buffer_size) != 0)
+        int write_status = pcm_write(_alsa_handle, _pcm_buffer, _pcm_buffer_size);
+        if(write_status != 0)
         {
             DEBUGF("ERROR %s: pcm_write failed: %s.", __func__, pcm_get_error(_alsa_handle));
 #ifdef SHANLING_M3X
+            /* A failed PREPARE can free the kernel's DSP client. Retrying the
+             * same handle then floods the kernel log instead of recovering. */
+            fprintf(stderr, "M3X PCM write failed (%d, %lu bytes): %s\n",
+                    write_status, (unsigned long)_pcm_buffer_size,
+                    pcm_get_error(_alsa_handle));
+            /* A control thread may replace the handle as soon as we unlock. */
+            char error[128];
+            snprintf(error, sizeof(error), "%s", pcm_get_error(_alsa_handle));
+            _dma_stopped = 1;
             pthread_mutex_unlock(&_dma_suspended_mtx);
+            panicf("M3X PCM write failed: %s", error);
 #endif
             usleep( 10000 );
             continue;
@@ -345,16 +367,9 @@ static void sink_dma_init(void)
     _config.rate              = hw_freq_sampr[HW_FREQ_DEFAULT];
     _config.period_size       = 256;
     _config.period_count      = 4;
-#ifdef SHANLING_M3X
-    /*
-        Software volume expands mixer samples to 32-bit PCM_NATIVE_BITDEPTH.
-        The codec-side format and bit-mode controls stay at the proven 16-bit
-        values; they do not describe the userspace PCM buffer layout.
-    */
-    _config.format            = PCM_FORMAT_S32_LE;
-#else
+    /* The M3X DSP rejects S32_LE at PREPARE even though hw_params accepts it.
+     * Use the same 16-bit layout as its software-volume output. */
     _config.format            = PCM_FORMAT_S16_LE;
-#endif
     _config.start_threshold   = 0;
     _config.stop_threshold    = 0;
     _config.silence_threshold = 0;
@@ -395,6 +410,15 @@ static void sink_dma_init(void)
     }
 
     DEBUGF("DEBUG %s: ALSA PCM frame buffer size: %d.", __func__, pcm_frames_to_bytes(_alsa_handle, pcm_get_buffer_size(_alsa_handle)));
+
+#ifdef SHANLING_M3X
+    if (pcm_prepare(_alsa_handle) != 0)
+    {
+        fprintf(stderr, "M3X PCM prepare failed: %s\n", pcm_get_error(_alsa_handle));
+        panicf("M3X PCM prepare failed: %s", pcm_get_error(_alsa_handle));
+        return;
+    }
+#endif
 
     /* Create pcm thread in the suspended state. */
     pthread_mutex_lock(&_dma_suspended_mtx);
@@ -471,7 +495,11 @@ static void sink_lock(void)
     TRACE;
 #ifdef SHANLING_M3X
     if (_play_lock_recursion_count >= 0)
+    {
+        __atomic_add_fetch(&_dma_control_waiters, 1, __ATOMIC_RELAXED);
         pthread_mutex_lock(&_dma_suspended_mtx);
+        __atomic_sub_fetch(&_dma_control_waiters, 1, __ATOMIC_RELAXED);
+    }
 #else
     ++_play_lock_recursion_count;
 
@@ -490,7 +518,10 @@ static void sink_unlock(void)
     TRACE;
 #ifdef SHANLING_M3X
     if (_play_lock_recursion_count >= 0)
+    {
+        pthread_cond_signal(&_dma_suspended_cond);
         pthread_mutex_unlock(&_dma_suspended_mtx);
+    }
 #else
     --_play_lock_recursion_count;
 
@@ -533,6 +564,14 @@ static void sink_set_freq(uint16_t freq)
             DEBUGF("ERROR %s: pcm_open failed: %s.", __func__, pcm_get_error(_alsa_handle));
             panicf("ERROR %s: pcm_open failed: %s.", __func__, pcm_get_error(_alsa_handle));
         }
+#ifdef SHANLING_M3X
+        if (pcm_prepare(_alsa_handle) != 0)
+        {
+            fprintf(stderr, "M3X PCM prepare failed after rate change: %s\n",
+                    pcm_get_error(_alsa_handle));
+            panicf("M3X PCM prepare failed: %s", pcm_get_error(_alsa_handle));
+        }
+#endif
     }
 #ifdef SHANLING_M3X
     pthread_mutex_unlock(&_dma_suspended_mtx);

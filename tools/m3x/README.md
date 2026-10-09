@@ -187,10 +187,39 @@ symbols. When changing these flags in an existing build, remove the module
 object files under `build-m3x/lib/rbcodec/codecs` and `build-m3x/apps/plugins`
 before rebuilding: Make does not track flag changes as dependencies.
 
-The playlist-path probe passed on-device, but the subsequent player launch
-exited with status 139. Symbol isolation addresses a concrete loading hazard;
-it has not yet been confirmed as the cause of that crash. The offline build
-needs a device check for boot, song selection, playback and plugin loading.
+An earlier player launch exited with status 139 after the playlist-path probe
+passed. Symbol isolation addresses a concrete loading hazard, but the original
+crash cause remains unconfirmed. Subsequent bounded native menu, song-selection
+and MP3 playback tests passed; plugin loading still needs a device check.
+
+## On-device playback findings — 2026-10-09
+
+Native menu/control tests and 3.5 mm headphone playback were verified on the
+M3X. S32_LE passed `pcm_open()` but failed `pcm_prepare()` with the DSP's
+`ADSP_EFAILED`, reported by ALSA as ENOMEM. S16_LE passed preparation and
+produced clean sound. The native software-volume output and ALSA stream now
+both use 16-bit samples. Earlier open-only format probes did not establish
+playback support.
+
+The inspector now supports a silent prepare-only check; it never starts the
+stream or writes samples:
+
+```sh
+# With Android running, no Rockbox instance, and the helper installed:
+adb shell "su -c '/data/local/tmp/m3xtest prepare 0 44100 2 0 256 4'"
+```
+
+The format argument is 0 for S16_LE and 1 for S32_LE in the bundled tinyalsa.
+The production sink checks preparation at initialization and rate changes.
+Unrecoverable write errors exit to launcher recovery instead of retrying a
+kernel handle whose DSP client may already have been freed.
+
+Holding the PCM mutex across blocking writes protected stream lifetime but
+could starve UI/control requests. The M3X worker now hands off to a waiting
+control request before starting another write. A continuous-writer replay
+reproduces the old starvation and checks bounded control latency, nested
+callbacks and safe concurrent sample-rate changes. The user confirmed prompt
+volume changes and clean sound on the M3X after the fix.
 
 ## Offline development and simulator
 
@@ -215,7 +244,7 @@ SDL_AUDIODRIVER=dummy ./rockboxui --nobackground --zoom 0.5
 The simulator uses the M3X's 768x1280 display, mouse input for touch, Space for
 play/pause, Left/Right for previous/next, Up/Down or +/- for volume and Escape
 for power. It uses the same supported plugin selection as the hosted build.
-Hardware audio expansion remains confined to the native build.
+The simulator does not exercise the Android PCM hardware.
 
 `python3 tools/m3x/run-simulator-test.py` uses a temporary copy of the installed
 simulator assets. It boots, selects the bundled MP3, saves menu and playing

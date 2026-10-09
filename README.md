@@ -15,16 +15,25 @@ the player attached.
 
 ## Current status
 
-Display takeover and bounded menu tests worked on the M3X. Playlist-control
-storage paths were fixed and tested on the device. A later launch exited with
-status 139; subsequent codec/plugin symbol-isolation fixes and audio changes
-have passed offline checks but still need confirmation on hardware.
+The M3X has now passed bounded native menu and MP3 playback tests. Touch and
+physical controls respond, playlist-control paths work, and clean sound through
+3.5 mm headphones with prompt volume response was confirmed by the user.
 
-The local offline pass completed 21 tests, an ARM64 build, and a silent simulator
-MP3 decoding test. Two of those tests need private boot-image fixtures and skip
-in a public checkout. Physical audio, volume calibration, sustained playback
-temperature/battery use, suspend, microSD mounting and final button behavior
-remain unverified. See [the full checklist](M3X_OFFLINE_CHECKLIST.md).
+Device testing found that S32_LE passed open-only checks but failed at DSP
+preparation. The player now uses a matched S16_LE stream and software-volume
+output, validates preparation, and exits to Android recovery on unrecoverable
+audio writes. A worker/control lock handoff fixed the reported volume/UI lag.
+
+The host suite has 24 passing tests; two require private boot-image fixtures
+and skip in a public checkout. Native ARM64 builds and packaged-module checks
+pass. The earlier immediate status-139 crash did not recur in these tests,
+but its original cause has not been traced conclusively.
+
+The final short playback run kept CPU sensor0 at 38–40 °C and battery
+temperature at 28.5–30.0 °C. Android recovery was verified afterward. Long
+playback, unplugged battery life, balanced output, absolute volume calibration,
+filters/rate transitions, suspend and microSD mounting still need validation.
+See [the full checklist](M3X_OFFLINE_CHECKLIST.md).
 
 ## Repository layout
 

@@ -8,7 +8,7 @@ boot-image flash or audible playback occurred.
 | Native ARM64 build and toolchain configuration | Built; reconfiguration now reuses the existing ARM64 toolchain. |
 | Memory allocation audit | Reduced the hosted audio reservation from 2047 MiB to 127 MiB. Total build-reported RAM use is about 136 MiB. |
 | Codec/plugin loading contracts | All 40 codecs and 16 plugins retain public loader headers and private API pointers/helpers; checked ARM64 PIE, non-executable stacks and absence of text relocations. |
-| PCM format and sample calculations | Matched software output to S32_LE, tested channel order, full-scale signed samples, attenuation, mute and expanded buffer sizes. Fixed signed shifts exposed by sanitizers. |
+| PCM format and sample calculations | Initially matched software output to S32_LE offline; device PREPARE testing later proved that stream unusable. Corrected to S16_LE and verified clean 3.5 mm output. Channel order, attenuation, mute and frame sizes remain covered by sanitizer replays. |
 | Volume and balance | Replaced the incompatible 0–100 hardware mapping with centibel software attenuation and independent channels. Hardware stays at the previously captured OEM reference; startup stays muted until playback. |
 | DAC filters | Exposed all six existing driver filters with valid settings and labels; tested the control names and invalid selections. |
 | Playback synchronization | Serialized writes, stop, close and sample-rate changes; tested nested callbacks and a rate change during a blocked mock write. |
@@ -22,10 +22,37 @@ boot-image flash or audible playback occurred.
 | Repeatable tests and packaging | Host gates, ARM64 probe compilation, ZIP integrity and packaged-module comparisons are scripted. |
 | Preparation for hardware investigation | Added a read-only collector for runtime, thermal, mmc1/microSD and Rockbox crash diagnostics. |
 
-The host suite has 21 tests. Driver replays run under address and undefined
+That offline pass had 21 host tests. Driver replays run under address and undefined
 behavior sanitizers. The simulator uses an isolated temporary filesystem and
 file-only audio output. It validates shared Rockbox behavior using macOS
 codecs; it cannot establish Android linker or physical DAC behavior.
+
+## Device follow-up — 2026-10-09
+
+The M3X was reconnected and the prepared build installed with the old module,
+assets and configuration backed up. The input/battery and real filesystem
+probes passed. The user confirmed menus, touch and physical controls respond.
+The first native playback attempt was silent: S32_LE opens, but the vendor DSP
+rejects PREPARE with ADSP_EFAILED, mapped by the kernel to ENOMEM. A silent
+S16_LE probe passed. Matching 16-bit software output and hardware stream then
+produced clean sound through 3.5 mm headphones.
+
+The user reported both UI and audio lag on volume changes. A continuous-writer
+stress replay reproduced control starvation; an explicit worker/control
+handoff fixed it. The user confirmed prompt volume response with clean audio.
+The host suite now has 24 passing tests, including prepare/write failure
+recovery and bounded control latency. The 56 packaged modules match the build.
+Local device evidence is under `validation/device-20261009/` and is not public.
+
+The menu test held CPU sensor0 at 32–33 C. The first successful 16-bit playback
+run held it at 37–39 C, with battery 27.0–28.7 C. These are short USB-connected
+tests, not long-run playback or unplugged battery validation. The final
+handoff run recorded CPU sensor0 at 38–40 C and battery at 28.5–30.0 C. Its
+completed trace and a final ADB check confirmed Rockbox stopped and both
+zygotes, SurfaceFlinger and thermal-engine were running. Boot autostart stays
+disabled. The error handler also copies its message before releasing the PCM
+lock, preventing a concurrent handle replacement from invalidating the text;
+the nine native-driver replays and ARM64 build passed again after that change.
 
 ## Artifacts and commands
 
@@ -40,13 +67,14 @@ codecs; it cannot establish Android linker or physical DAC behavior.
 
 ## Device checks still required
 
-1. Deploy the matched executable/assets, then verify the previous status-139
-   crash with Android diagnostics available. Symbol collision was a concrete
-   hazard; the original crash has not been traced to it conclusively.
+1. Longer playback, plugin loading and repeated starts still need testing.
+   The previous immediate status-139 crash did not recur in the bounded menu
+   and MP3 runs, but its original cause was not traced conclusively.
 2. Check physical buttons, encoder behavior, touchscreen edges, gestures and
    software lock against the real evdev devices.
-3. Confirm DAC output and volume polarity/calibration, both jacks, both DACs,
-   balance, filters, sample-rate transitions, underruns and long playback.
+3. Clean 3.5 mm playback and prompt volume changes are confirmed. Balanced
+   output, absolute volume calibration, both DACs, balance, filters, sample-rate
+   transitions, underruns and long playback still require hardware checks.
 4. Measure temperature and battery use during sustained playback and screen
    off/on. Whole-system suspend remains deliberately unimplemented pending
    hardware investigation.

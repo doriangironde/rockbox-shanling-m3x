@@ -43,3 +43,12 @@ class NativeDriverTests(unittest.TestCase):
 
     def test_pcm_rate_change_waits_for_write_and_nested_callbacks(self):
         self.compile_and_run("pcm-thread.c")
+
+    def test_pcm_rejects_failed_prepare_before_starting_worker(self):
+        self.compile_and_run("pcm-thread.c", extra_flags=["-DM3X_TEST_PREPARE_FAILURE"])
+
+    def test_pcm_write_error_exits_instead_of_retrying_dead_handle(self):
+        self.compile_and_run("pcm-thread.c", extra_flags=["-DM3X_TEST_WRITE_FAILURE"])
+
+    def test_pcm_continuous_writer_does_not_starve_controls(self):
+        self.compile_and_run("pcm-thread.c", extra_flags=["-DM3X_TEST_CONTROL_LATENCY"])

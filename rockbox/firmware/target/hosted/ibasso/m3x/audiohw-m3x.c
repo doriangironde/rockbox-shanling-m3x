@@ -199,16 +199,16 @@ void audiohw_m3x_init(void)
 
     /*
         "AK4497 Format" selects the codec's word width, and it must NOT be
-        S32_LE even though the PCM is opened S32_LE. Measured on the M3X, with
-        the Quinary MI2S route enabled:
+        S32_LE. Earlier open-only probes with the Quinary MI2S route enabled
+        reported:
 
             AK4497 Format = S16_LE -> pcm_open OK
             AK4497 Format = S24_LE -> pcm_open OK
             AK4497 Format = S32_LE -> pcm_open fails "cannot set hw params"
 
-        The AK4497 cannot be configured for 32-bit words over this MI2S link, so
-        requesting it makes the Quinary MI2S refuse its hw params and the PCM
-        never opens. S16_LE is the OEM's own default and is what Android leaves
+        Native PCM S32_LE also fails at DSP PREPARE despite passing hw_params;
+        the production stream and software-volume output now use S16_LE.
+        S16_LE is the OEM's own default and is what Android leaves
         the control at, so leave it alone; it is set explicitly only to undo a
         previous run that may have set S32_LE.
     */
@@ -220,9 +220,10 @@ void audiohw_m3x_init(void)
         track the sample format, but it does not: any value other than 16 makes
         the Quinary MI2S reject its hw params.
 
-            bit mode=16, PCM S16_LE -> OK      bit mode=24, any PCM -> FAIL
-            bit mode=16, PCM S32_LE -> OK      bit mode=32, any PCM -> FAIL
-            bit mode=16, PCM S24_LE -> OK
+        bit mode=16, PCM S16_LE -> open OK; PREPARE verified separately
+        bit mode=16, PCM S32_LE -> open OK but PREPARE fails
+        bit mode=16, PCM S24_LE -> open OK only; playback not established
+        bit mode=24 or 32, any PCM -> open FAIL
 
         The PCM data is unaffected, so this only constrains the codec side.
         It is set explicitly to undo a previous run that moved it.

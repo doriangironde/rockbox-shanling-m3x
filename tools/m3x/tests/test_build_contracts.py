@@ -28,9 +28,9 @@ class BuildContractTests(unittest.TestCase):
                    "-include", "audiohw.h", "-include", "rbpaths.h", "-"]
         output = subprocess.check_output(command, input="", text=True)
         macros = dict(re.findall(r"^#define (\w+)(?: (.*))?$", output, re.M))
-        self.assertEqual(macros["PCM_NATIVE_BITDEPTH"], "32")
+        self.assertEqual(macros["PCM_NATIVE_BITDEPTH"], "16")
         self.assertEqual(macros["PCM_SW_VOLUME_FRACBITS"], "16")
-        self.assertIn("WANT_SWVOL_32", macros)
+        self.assertNotIn("WANT_SWVOL_32", macros)
         self.assertIn("AUDIOHW_HAVE_FILTER_ROLL_OFF", macros)
         self.assertNotIn("AUDIOHW_HAVE_MONO_VOLUME", macros)
         self.assertNotIn("HAVE_SPECIAL_DIRS", macros)

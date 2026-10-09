@@ -1,1 +1,2 @@
-/* No 16-bit clipping function is needed for the M3X 32-bit output. */
+/* Exercise the production 16-bit clipper with the software-volume code. */
+#include "../../../../rockbox/firmware/export/dsp-util.h"

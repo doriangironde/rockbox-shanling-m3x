@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <stdlib.h>
+#include <time.h>
 #include "../../../rockbox/firmware/target/hosted/ibasso/pcm-ibasso.c"
 
 struct pcm { bool alive; };
@@ -7,17 +8,43 @@ static pthread_mutex_t gate = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t condition = PTHREAD_COND_INITIALIZER;
 static bool writing, release_write, changing;
 static int closes;
-void panicf(const char *fmt, ...) { (void)fmt; abort(); }
+#ifdef M3X_TEST_CONTROL_LATENCY
+static int writes;
+static bool stress_stop;
+#endif
+void panicf(const char *fmt, ...)
+{
+    (void)fmt;
+#if defined(M3X_TEST_PREPARE_FAILURE) || defined(M3X_TEST_WRITE_FAILURE)
+    assert(!writing);
+    exit(0);
+#else
+    abort();
+#endif
+}
 void audiohw_m3x_init(void) {}
 void audiohw_m3x_unmute(void) {}
 void audiohw_m3x_fallback_route(void) {}
 struct pcm *pcm_open(unsigned int c, unsigned int d, unsigned int flags, struct pcm_config *config)
 {
     (void)c; (void)d; (void)flags;
-    assert(config->format == PCM_FORMAT_S32_LE);
+#ifndef M3X_TEST_PREPARE_FAILURE
+    assert(config->format == PCM_FORMAT_S16_LE);
+#else
+    (void)config;
+#endif
     struct pcm *p = malloc(sizeof(*p)); assert(p); p->alive = true; return p;
 }
 int pcm_is_ready(struct pcm *p) { return p && p->alive; }
+int pcm_prepare(struct pcm *p)
+{
+    assert(p && p->alive);
+#ifdef M3X_TEST_PREPARE_FAILURE
+    return -1;
+#else
+    return 0;
+#endif
+}
 const char *pcm_get_error(struct pcm *p) { (void)p; return "test"; }
 int pcm_close(struct pcm *p)
 {
@@ -31,6 +58,23 @@ int pcm_stop(struct pcm *p) { assert(p && p->alive); return 0; }
 int pcm_write(struct pcm *p, const void *data, unsigned int bytes)
 {
     assert(data && bytes == 32);
+#ifdef M3X_TEST_WRITE_FAILURE
+    assert(p && p->alive);
+    return -1;
+#endif
+#ifdef M3X_TEST_CONTROL_LATENCY
+    pthread_mutex_lock(&gate);
+    assert(p && p->alive);
+    writing = true;
+    ++writes;
+    pthread_cond_broadcast(&condition);
+    pthread_mutex_unlock(&gate);
+    usleep(5000); /* A continuously fed, blocking hardware writer. */
+    pthread_mutex_lock(&gate);
+    writing = false;
+    pthread_mutex_unlock(&gate);
+    return 0;
+#endif
     pthread_mutex_lock(&gate);
     assert(p && p->alive);
     writing = true; pthread_cond_broadcast(&condition);
@@ -40,7 +84,18 @@ int pcm_write(struct pcm *p, const void *data, unsigned int bytes)
     return 0;
 }
 bool pcm_play_dma_complete_callback(enum pcm_dma_status s, const void **data, size_t *size)
-{ (void)s; (void)data; (void)size; sink_dma_stop(); return false; }
+{
+    (void)s; (void)data; (void)size;
+#ifdef M3X_TEST_CONTROL_LATENCY
+    static const int32_t samples[8] = {0};
+    sink_lock(); sink_unlock(); /* The real callback can re-enter core locks. */
+    pthread_mutex_lock(&gate);
+    bool stopped = stress_stop;
+    pthread_mutex_unlock(&gate);
+    if (!stopped) { *data = samples; *size = sizeof(samples); return true; }
+#endif
+    sink_dma_stop(); return false;
+}
 enum pcm_dma_status pcm_play_dma_status_callback(enum pcm_dma_status s) { return s; }
 static void *change_rate(void *unused)
 {
@@ -54,6 +109,33 @@ static void *change_rate(void *unused)
 int main(void)
 {
     sink_dma_init(); sink_dma_postinit();
+#ifdef M3X_TEST_PREPARE_FAILURE
+    assert(!"A PCM that cannot prepare must abort before playback starts");
+#endif
+#ifdef M3X_TEST_CONTROL_LATENCY
+    const int32_t stream[8] = {0};
+    sink_dma_start(stream, sizeof(stream));
+    pthread_mutex_lock(&gate);
+    while (writes < 5) pthread_cond_wait(&condition, &gate);
+    pthread_mutex_unlock(&gate);
+    double maximum = 0;
+    for (int i = 0; i < 8; ++i) {
+        struct timespec before, after;
+        clock_gettime(CLOCK_MONOTONIC, &before);
+        sink_lock(); sink_unlock();
+        clock_gettime(CLOCK_MONOTONIC, &after);
+        double elapsed = after.tv_sec - before.tv_sec +
+                         (after.tv_nsec - before.tv_nsec) / 1000000000.0;
+        if (elapsed > maximum) maximum = elapsed;
+        assert(elapsed < 0.1); /* A UI request cannot starve behind many writes. */
+        usleep(1000);
+    }
+    pthread_mutex_lock(&gate); stress_stop = true; pthread_mutex_unlock(&gate);
+    sink_dma_stop(); pcm_close_device();
+    pthread_cancel(_pcm_thread); pthread_join(_pcm_thread, NULL);
+    printf("PASS: continuous PCM writer, maximum control wait %.3f ms\n", maximum * 1000);
+    return 0;
+#endif
     /* Nested core locks must recurse; playback resumes only after unlock. */
     sink_lock(); sink_lock(); sink_unlock(); sink_set_freq(1);
     const int32_t samples[8] = {0};
