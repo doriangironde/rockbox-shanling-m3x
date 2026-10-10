@@ -36,11 +36,28 @@
 #include "sysfs-ibasso.h"
 #include "vold-ibasso.h"
 
+#ifdef SHANLING_M3X
+static bool android_return;
+
+void m3x_set_android_return(bool enabled)
+{
+    android_return = enabled;
+}
+#endif
+
 void power_off(void)
 {
     TRACE;
 
     button_close_device();
+
+#ifdef SHANLING_M3X
+    if (android_return)
+    {
+        /* The module launcher restores Android after this clean process exit. */
+        exit(EXIT_SUCCESS);
+    }
+#endif
 
     if(vold_monitor_forced_close_imminent())
     {

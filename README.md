@@ -1,8 +1,9 @@
 # Rockbox for Shanling M3X
 
 An experimental native ARM64 Rockbox port for the Shanling M3X, running on its
-existing rooted Android system. This is a development source repository,
-not a finished firmware release or a ready-to-install Magisk package.
+existing rooted Android system. This is an independent development port. A
+standalone installer supports the tested rooted firmware 1.75 setup; it is not
+a firmware image or a ZIP for Magisk/recovery flashing.
 
 **AI assistance disclaimer:** This project was written with the help of AI.
 All changes and validation checks were approved by a human.
@@ -29,16 +30,46 @@ preparation. The player now uses a matched S16_LE stream and software-volume
 output, validates preparation, and exits to Android recovery on unrecoverable
 audio writes. A worker/control lock handoff fixed the reported volume/UI lag.
 
-The host suite has 24 passing tests; two require private boot-image fixtures
+The host suite has 44 passing tests; two require private boot-image fixtures
 and skip in a public checkout. Native ARM64 builds and packaged-module checks
 pass. The earlier immediate status-139 crash did not recur in these tests,
 but its original cause has not been traced conclusively.
 
-The final short playback run kept CPU sensor0 at 38–40 °C and battery
-temperature at 28.5–30.0 °C. Android recovery was verified afterward. Long
-playback, unplugged battery life, balanced output, absolute volume calibration,
-filters/rate transitions, suspend and microSD mounting still need validation.
-See [the full checklist](M3X_OFFLINE_CHECKLIST.md).
+A six-track FLAC album completed continuously in 11 min 13 s with zero detected
+tinyalsa underruns, elapsed-time discontinuities or stalled PCM hardware pointers.
+The screen stayed locked and dark for 8 min 38 s before a confirmed manual unlock;
+full-album screen-off coverage therefore remains partial. CPU sensor0 stayed at
+41–45 °C and battery temperature at 32.2–33.0 °C with USB connected.
+
+An eight-track MP3/FLAC playlist also completed with the screen locked, exercising
+native output rates of 44.1, 48, 88.2, 96, 176.4 and 192 kHz. The 32 kHz MP3 source
+was output at 48 kHz. A duplicate-launch recovery bug was fixed and tested on the
+player: refusing a second launch now leaves the active player and its Android
+takeover intact. Android recovery was verified after both completed runs.
+
+These checks observe software and PCM progress; analog dropouts and unplugged
+battery consumption were not measured. Balanced output, absolute volume
+calibration, DAC filter behavior, shuffle/repeat, plugins, physical shutdown,
+suspend and physical microSD removal still need validation. Basic microSD access
+now passes: a 128 GB card was formatted as FAT32, exposed as **Files → microSD**,
+and used for MP3/FLAC playback and an Android unmount/remount check. Reboot persistence remains unverified; the standalone installer now creates
+the microSD link. See
+[the full checklist](M3X_OFFLINE_CHECKLIST.md).
+
+## Launch from Android and return
+
+Tap **Rockbox** in Android to start a one-time native session. Grant the app root
+access in Magisk. Startup takes about 20 seconds, or longer if the player needs
+to cool. Boot autostart stays disabled, and there is no session-duration timer.
+
+To return, tap **Home** from Now Playing and choose **Return to Android** at the
+bottom of Rockbox's main menu. This saves state, stops playback, closes audio and
+restores Android without powering off or rebooting the M3X. A launch/play/return
+round trip was verified on the device. Physical Power keeps its existing behavior.
+
+The APK source, build instructions and prerequisites are in
+[android-launcher/README.md](android-launcher/README.md). It launches the native
+development installation; it does not install the port or firmware itself.
 
 ## Screen off and pocket controls
 
@@ -118,6 +149,14 @@ sh tools/m3x/verify-offline.sh
 This does not connect to, flash or install anything on a player. The resulting
 `build-m3x/m3x-offline-bundle.zip` is for manual development updates to an existing
 setup. Boot images, rooted firmware and a Magisk installer are not included.
+
+For the standalone installer, first build the Android launch APK with the
+retained signing identity, then run `python3 tools/m3x/package-installer.py`.
+This produces checksummed installer and corresponding-source ZIPs in
+`build-m3x/release/`. Installation checks the target and backs up the previous
+player, assets/settings, scripts, framebuffer helper and launcher APK. Updates
+preserve settings and music; rollback restores the saved installation. See
+[installation, update and rollback instructions](tools/m3x/INSTALL.md).
 
 ## Test with an M3X
 

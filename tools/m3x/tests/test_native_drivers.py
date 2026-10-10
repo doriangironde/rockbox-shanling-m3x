@@ -30,6 +30,9 @@ class NativeDriverTests(unittest.TestCase):
     def test_backlight_remembers_level_and_retries(self):
         self.compile_and_run("backlight.c", [IBASSO / "sysfs-ibasso.c"])
 
+    def test_android_return_exits_without_hardware_poweroff(self):
+        self.compile_and_run("power-return.c")
+
     def test_audio_volume_mute_filters_and_mixer_lifetime(self):
         self.compile_and_run("audio-hardware.c")
 
@@ -52,3 +55,21 @@ class NativeDriverTests(unittest.TestCase):
 
     def test_pcm_continuous_writer_does_not_starve_controls(self):
         self.compile_and_run("pcm-thread.c", extra_flags=["-DM3X_TEST_CONTROL_LATENCY"])
+
+    def test_pcm_hotplug_live_paused_repeated_busy_and_write_serialization(self):
+        self.compile_and_run("pcm-hotplug.c")
+
+    def test_earpods_card_discovery_caps_and_busy_handover(self):
+        self.compile_and_run("pcm-usb.c")
+
+    def test_earpods_enumeration_gap_at_startup_does_not_select_internal(self):
+        self.compile_and_run("pcm-usb.c", extra_flags=["-DM3X_TEST_USB_ENUM_DELAY"])
+
+    def test_other_usb_device_keeps_internal_dac(self):
+        self.compile_and_run("pcm-usb.c", extra_flags=["-DM3X_TEST_OTHER_USB"])
+
+    def test_earpods_busy_failure_recovers_to_internal(self):
+        self.compile_and_run("pcm-usb.c", extra_flags=["-DM3X_TEST_USB_BUSY"])
+
+    def test_earpods_removed_during_handover_recovers_to_internal(self):
+        self.compile_and_run("pcm-usb.c", extra_flags=["-DM3X_TEST_USB_REMOVAL"])

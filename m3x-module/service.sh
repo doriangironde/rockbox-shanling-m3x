@@ -65,12 +65,21 @@ restore_android() {
     log "Rockbox stopped; module disabled; Android display restored"
 }
 
+# Refusing a second launch does not own the display or the existing wake lock.
+# Do this before installing recovery traps or waiting on startup temperatures.
+if pidof rockbox rockbox-dbg >/dev/null; then
+    log "Rockbox already running; refusing a second instance"
+    exit 1
+fi
+
 BRIGHTNESS=$(cat /sys/class/leds/lcd-backlight/brightness)
 trap 'exit 1' HUP INT TERM
 trap restore_android EXIT
 wait_for_cool_start || exit 1
 if pidof rockbox rockbox-dbg >/dev/null; then
     log "Rockbox already running; refusing a second instance"
+    # Another session may have started while this one waited for cooling.
+    trap - EXIT HUP INT TERM
     exit 1
 fi
 

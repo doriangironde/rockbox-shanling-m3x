@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.rockbox.m3x.launcher" android:versionCode="1" android:versionName="1.0">
+    <uses-sdk android:minSdkVersion="25" android:targetSdkVersion="25" />
+    <application android:label="Rockbox" android:icon="@drawable/icon"
+        android:allowBackup="false" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <activity android:name=".LaunchActivity" android:exported="true"
+            android:launchMode="singleTask" android:screenOrientation="portrait">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

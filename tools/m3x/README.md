@@ -136,9 +136,29 @@ are verified against the device's capabilities; physical button presses remain
 a separate manual check. Touch handling follows the kernel's protocol-B slot
 and frame semantics: https://www.kernel.org/doc/html/latest/input/multi-touch-protocol.html
 
-Internal storage now uses `/data/media/0` directly, independent of Android
-FUSE. No microSD card is detected on `mmc1`; card mounting/hotplug remains
-unverified.
+Internal storage uses `/data/media/0` directly, independent of Android FUSE.
+The inserted 128 GB microSD was detected on `mmc1` as `/dev/block/mmcblk1` and
+formatted through Android as public FAT32 storage. Android mounts it at
+`/mnt/media_rw/external_sd1`; the development installation exposes this raw mount
+through `/data/media/0/microSD`, a symlink visible as **Files → microSD** in
+Rockbox. This avoids the Android FUSE path during native playback.
+
+The card passed write/read checks, native MP3/FLAC playback at 44.1/48 kHz with
+zero observed underruns, and Android unmount/remount with unchanged test-file
+hashes. The mount remained available while Android's app runtimes were stopped.
+This is basic mounted-card access; physical removal during playback and reboot
+persistence have not been tested. Return to Android and eject the card before
+removing it. The standalone installer creates this link if no entry exists.
+
+For an already mounted card at that verified path, expose it once with Android
+running and Rockbox stopped (the command refuses to replace an existing entry):
+
+```sh
+adb shell "su -c 'test -d /mnt/media_rw/external_sd1 && test ! -e /data/media/0/microSD && test ! -L /data/media/0/microSD && ln -s /mnt/media_rw/external_sd1 /data/media/0/microSD'"
+```
+
+Do not format a card merely to expose an existing filesystem. FAT32 has a
+4 GiB single-file limit; other filesystems have not been validated here.
 
 The one-boot wrapper restores its normal launcher through a temporary file and
 atomic rename. Never copy over the executing script's inode: the shell may
@@ -283,5 +303,187 @@ the M3X and run it as root only when the device is available.
 The full offline work list, results and remaining hardware checks are in
 `M3X_OFFLINE_CHECKLIST.md`.
 
+## Full-album screen-off diagnostics
+
+`playback-soak.sh` starts the installed launcher in a temporary module
+directory, leaving boot autostart disabled. It samples PCM pointers/state,
+temperatures, process CPU/RSS, USB/battery sensors and a read-only playback
+observer every roughly two seconds. The existing 55 C CPU / 40 C battery
+cutoffs remain active. An independent 20-minute guard restores Android if
+the host disappears. Four consecutive stopped PCM samples end the run;
+a pause is therefore not a valid uninterrupted-album result.
+
+Build the observer from the **same completed native build** as the installed
+player. The build script derives metadata offsets with that build's compiler
+flags, the private tinyalsa underrun offset from its source, and ELF symbol
+addresses with `nm`. It reads `/proc/PID/mem` with `O_RDONLY`, without ptrace,
+process suspension or memory writes. The launcher checks the installed ELF's
+MD5 against the observer manifest before starting; this detects accidental
+build mismatches. Rebuild the player and observer together after source edits.
+
+```sh
+python3 tools/m3x/build-playback-observer.py /tmp/m3x-observer
+adb push /tmp/m3x-observer/m3x-playback-observer /data/local/tmp/
+adb push /tmp/m3x-observer/m3x-playback-observer.md5 /data/local/tmp/
+adb push tools/m3x/playback-soak.sh /data/local/tmp/m3x-playback-soak.sh
+adb shell mkdir /data/local/tmp/m3x-soak-unique-run
+adb shell "su -c 'chmod 755 /data/local/tmp/m3x-playback-observer; sh /data/local/tmp/m3x-playback-soak.sh /data/local/tmp/m3x-soak-unique-run'"
+```
+
+Wait for the `ready` file, select the first album track, then briefly press
+physical Power and leave the controls untouched. The native lock flag and
+zero backlight are recorded. The initiating root request detaches and waits
+ten seconds before takeover, allowing Magisk's Android logging to finish.
+Use ordinary shell reads during playback; repeated `su` requests while the
+framework is stopped can introduce artificial CPU load.
+
+For automated controls, write a line to `OUT/command.pending` as the shell
+user, then atomically rename it to `OUT/command`. Supported commands are
+`tap X Y` in 768×1280 panel coordinates, `lock`, `unlock`, `capture LABEL`,
+`duplicate` and `finish`. `duplicate` verifies that the installed launcher
+refuses a second instance without restoring Android under the playing one.
+`lock` sends a brief key press through `qpnp_pon`; confirm the
+observer's actual `screen_locked` flag, since manual presses also toggle it.
+The initial fade-out is allowed before checking for unexpected relighting.
+
+After `done` appears, pull into a **new** local directory and summarize:
+
+```sh
+adb pull /data/local/tmp/m3x-soak-unique-run /tmp/m3x-soak-result
+python3 tools/m3x/summarize-playback-soak.py /tmp/m3x-soak-result \
+    --expected-album /path/to/metadata.json
+```
+
+The optional metadata JSON is an ordered array with `file` for each expected
+track. The summary rejects incomplete captures, seeks/timing discontinuities,
+released screen lock, incomplete track coverage, observed underruns, missing
+natural completion and failed Android recovery. The cumulative tinyalsa
+counter catches internally recovered underruns that PCM snapshots can miss.
+Counter resets across handle changes and analog output are separate limits:
+this cannot replace listening or an external audio capture. USB-connected
+battery/current readings do **not** establish unplugged battery consumption.
+
+`make-format-fixtures.py OUTPUT_DIR` generates eight quiet synthetic stereo
+MP3/FLAC tracks at 32–192 kHz, an M3U8 playlist and a checksum/metadata manifest.
+It requires local `ffmpeg`/`ffprobe` and does not use user music. These fixtures
+allow a short device test of codec and sample-rate transitions after the album
+pass. Generating fixtures alone does not validate the hardware path.
+
 Boot-image tests skip when their four private fixtures are absent. ARM64
 build tests require a completed native build; see the root README for setup.
+
+
+## Android icon and clean return
+
+`android-launcher/` contains the small Android app that starts a one-time native
+session. Build it with `python3 tools/m3x/build-android-launcher.py`; keep the local
+signing key for subsequent APK updates. The app needs Magisk root permission and
+an installed `m3x-module/launch.sh`, native player, normal service and fbpan helper.
+See [the launcher instructions](../../android-launcher/README.md).
+
+`launch.sh` keeps the real Magisk module disabled, serializes requests with a
+root-owned process lock, detaches a root worker, and waits ten seconds for the
+app's su request/logging to finish. It then invokes the existing service through
+a private session directory. There is no manual-session duration timer. A stale
+lock whose owner exited is reclaimed on the next request.
+
+The native main menu's **Return to Android** action uses normal Rockbox shutdown
+cleanup, saving state and stopping/closing audio. Its target power boundary then
+exits status 0 instead of calling hardware power-off. If shutdown is cancelled
+while the database is busy, the temporary return flag is cleared. Physical Power
+continues to control screen lock and hardware shutdown. Native-only guards leave
+other targets and the simulator unchanged.
+
+The no-ADB round trip was tested during FLAC playback, including restored Android
+home UI, closed PCM, released launch lock and disabled boot autostart. Host replays
+cover clean process exit versus power-off and repeated/concurrent/stale requests.
+
+## USB-C headphones without a live ADB cable
+
+The M3X PCM backend supports the internal DAC and the Apple USB-C EarPods
+described below. USB headphones working in Android do not establish their native
+capabilities or whether their driver stays bound after Android takeover.
+
+`usb-audio-capture.sh` is a read-only, detached five-minute recorder. Start it
+while the player is connected to the computer and Android is running:
+
+```sh
+adb push tools/m3x/usb-audio-capture.sh /data/local/tmp/m3x-usb-audio-capture.sh
+adb shell "su -c 'sh /data/local/tmp/m3x-usb-audio-capture.sh /data/local/tmp/m3x-usb-audio-test1 300'"
+```
+
+Then unplug the computer cable, connect the USB headphones, and play about
+30 seconds in Android. Stop Android playback, tap the Rockbox icon and try the
+same track for about 30 seconds. Choose Return to Android, disconnect the
+headphones, and reconnect the computer. The collector keeps running through
+these changes; it never starts/stops music or alters USB/audio settings.
+
+Pull the capture after its `done` marker exists. The raw data includes ALSA card
+identities, USB streaming formats/rates, PCM ownership/state/parameters, USB
+interface drivers and role state, Android service state, and before/after kernel
+logs. Keep raw device logs private. No actual audio samples are recorded.
+
+The optional duration is 30–600 seconds, sampled every five seconds. Use a fresh
+`/data/local/tmp/m3x-usb-audio-*` directory each time. Capture completion only stops
+the recorder; it does not end the Rockbox session.
+
+`usb-earpods-probe.c` is a separate direct-output diagnostic for the observed
+Apple EarPods ID 05ac:110b. It waits up to 90 seconds for that exact USB audio
+card, logs its mixer values without changing them, and tries three-second stereo
+S16_LE/440 Hz tones at 48 and 44.1 kHz, at -50 dBFS with fades. It never opens
+card 0 or changes Android services. Its 120-second process deadline also bounds
+blocked PCM calls. A successful stream log proves writes, not audible sound.
+This is a diagnostic and does not add USB output to the Rockbox player.
+
+## Apple USB-C EarPods output
+
+The M3X PCM sink detects Apple USB-C EarPods (`05ac:110b`) at startup and during
+a session, discovers
+their ALSA card, and uses stereo S16_LE at 44100 Hz. Rockbox resamples other
+source rates through the sink capability table. Insertion selects USB; removal
+selects the internal DAC. Playback restarts from the saved track position with a
+brief gap, preserving pause state. A USB write failure requests stream recovery
+instead of exiting the player. An unavailable USB endpoint falls back to the
+internal DAC and is retried after removal and reinsertion. Other USB audio
+devices, headset controls and microphone input are unsupported. The Android
+launch icon and boot behavior are unchanged.
+
+`usb-audio-capture.sh` optionally runs the installed read-only playback observer
+when its MD5 matches the running executable. It also captures screen brightness
+and CPU/battery temperatures. The recorder remains bounded and never starts
+playback, changes routes or controls the screen.
+
+Driver regression replay includes USB card enumeration, exact device identity,
+fixed-rate capabilities, bounded ownership handover, removal and write failure,
+paused removal, in-flight write serialization, busy fallback and reinsertion.
+The direct USB diagnostic was audible at 44100 Hz. Its initial 48000 Hz attempt
+was busy, so it establishes no 48000 Hz result. Audible Rockbox playback through
+the EarPods was confirmed by the user after the startup enumeration correction.
+Subsequent removal produced ENODEV and a player exit, causing the launcher to
+restore Android. Kernel uptime continued; this was not a device reboot. The
+hotplug implementation addresses this failure. Repeated physical swaps were
+confirmed working by the user; captured logs show three internal fallbacks and
+four USB selections followed by clean exit 0 and Android restoration.
+
+The device test exposed a USB re-enumeration gap during Android takeover.
+Startup detection now retries for at most two seconds before choosing the
+internal DAC; the delayed-enumeration regression fails before this correction
+and passes afterward.
+
+## Standalone installer and rollback
+
+After building the matching native assets, framebuffer helper and signed launch
+APK, run `python3 tools/m3x/package-installer.py`. It writes deterministic
+installer and corresponding-source archives under `build-m3x/release/`. See
+[installation and recovery instructions](INSTALL.md). The installer checks the
+tested rooted M3X firmware 1.75/API 25 target, file hashes, active Android and
+backup space, and shares the manual launch lock. It snapshots the player,
+assets/settings, scripts, helper and APK before replacement. Android stays the
+default boot and an existing microSD entry is preserved. No card is formatted.
+
+Host tests cover corrupted payload refusal, wrong target/running player/pending
+launch refusal, settings/music preservation, full rollback, first-install
+removal and automatic recovery after APK failure or a partial module copy.
+Device update and rollback passed with unchanged settings/resume and card-file
+hashes. A matching source archive records all source hashes and excludes private
+firmware, signing keys and device logs.

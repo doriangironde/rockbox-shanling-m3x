@@ -43,7 +43,12 @@
 
 #ifdef SHANLING_M3X
 #include <stdio.h>
+#include <string.h>
+#include <time.h>
 #include "audiohw-m3x.h"
+static void m3x_check_hotplug_locked(void);
+static bool m3x_usb_write_failed_locked(void);
+static bool _output_change_pending;
 #endif
 
 
@@ -92,14 +97,31 @@ static void* pcm_thread_run(void* nothing)
     while(true)
     {
         pthread_mutex_lock(&_dma_suspended_mtx);
+#ifdef SHANLING_M3X
+        m3x_check_hotplug_locked();
+#endif
         while((_dma_stopped == 1) || (_dma_locked == 1)
 #ifdef SHANLING_M3X
+              || _output_change_pending
               || __atomic_load_n(&_dma_control_waiters, __ATOMIC_RELAXED) != 0
 #endif
              )
         {
             DEBUGF("DEBUG %s: Playback suspended.", __func__);
+#ifdef SHANLING_M3X
+            struct timespec deadline;
+            clock_gettime(CLOCK_REALTIME, &deadline);
+            deadline.tv_nsec += 250000000;
+            if (deadline.tv_nsec >= 1000000000)
+            {
+                ++deadline.tv_sec;
+                deadline.tv_nsec -= 1000000000;
+            }
+            pthread_cond_timedwait(&_dma_suspended_cond, &_dma_suspended_mtx, &deadline);
+            m3x_check_hotplug_locked();
+#else
             pthread_cond_wait(&_dma_suspended_cond, &_dma_suspended_mtx);
+#endif
             DEBUGF("DEBUG %s: Playback resumed.", __func__);
         }
 #ifndef SHANLING_M3X
@@ -132,6 +154,11 @@ static void* pcm_thread_run(void* nothing)
             fprintf(stderr, "M3X PCM write failed (%d, %lu bytes): %s\n",
                     write_status, (unsigned long)_pcm_buffer_size,
                     pcm_get_error(_alsa_handle));
+            if (m3x_usb_write_failed_locked())
+            {
+                pthread_mutex_unlock(&_dma_suspended_mtx);
+                continue;
+            }
             /* A control thread may replace the handle as soon as we unlock. */
             char error[128];
             snprintf(error, sizeof(error), "%s", pcm_get_error(_alsa_handle));
@@ -217,12 +244,200 @@ static pthread_t _pcm_thread;
 
 
 /* ALSA card and device. */
+#ifdef SHANLING_M3X
+static unsigned int CARD = 0;
+static unsigned int _pcm_flags = PCM_OUT;
+static bool _usb_earpods;
+/* Keep stale peak-meter indices in bounds during a capability transition.
+ * Only entry 0 is advertised while USB is selected. */
+static const unsigned long ear_pods_samprs[HW_NUM_FREQ] = { [0 ... HW_NUM_FREQ-1] = 44100 };
+
+/* Select only the USB device whose stream was verified on this player.
+ * Card numbers are assigned at enumeration, so never assume card 1. */
+static int find_earpods_card(void)
+{
+    for (int card = 1; card < 32; ++card)
+    {
+        char path[64], id[32];
+        snprintf(path, sizeof(path), "/proc/asound/card%d/usbid", card);
+        FILE *file = fopen(path, "r");
+        if (!file)
+            continue;
+        bool found = fgets(id, sizeof(id), file) &&
+                     strncmp(id, "05ac:110b", 9) == 0 &&
+                     (id[9] == '\n' || id[9] == '\0');
+        fclose(file);
+        if (found)
+            return card;
+    }
+    return -1;
+}
+#else
 static const unsigned int CARD   = 0;
+#endif
 static const unsigned int DEVICE = 0;
 
 
 /* ALSA config. */
 static struct pcm_config _config;
+
+#ifdef SHANLING_M3X
+static void (*_output_callback)(void);
+static int _ignored_usb_card = -1;
+static bool _output_fault;
+static struct timespec _next_hotplug_check;
+
+static void m3x_request_output_change(void)
+{
+    if (!_output_change_pending)
+    {
+        _output_change_pending = true;
+        if (_output_callback)
+            _output_callback();
+    }
+}
+
+static void m3x_check_hotplug_locked(void)
+{
+    if (!_alsa_handle)
+        return;
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    if (now.tv_sec < _next_hotplug_check.tv_sec ||
+        (now.tv_sec == _next_hotplug_check.tv_sec && now.tv_nsec < _next_hotplug_check.tv_nsec))
+        return;
+    _next_hotplug_check = now;
+    _next_hotplug_check.tv_nsec += 250000000;
+    if (_next_hotplug_check.tv_nsec >= 1000000000)
+    {
+        ++_next_hotplug_check.tv_sec;
+        _next_hotplug_check.tv_nsec -= 1000000000;
+    }
+    int card = find_earpods_card();
+    if (card < 0)
+        _ignored_usb_card = -1;
+    unsigned int desired = card >= 0 && card != _ignored_usb_card ? card : 0;
+    if (desired != CARD)
+        m3x_request_output_change();
+}
+
+static bool m3x_usb_write_failed_locked(void)
+{
+    if (!_usb_earpods)
+        return false;
+    /* Keep the current buffer and stop touching the removed PCM. The audio
+     * thread will stop decoding, switch endpoints and resume this position. */
+    _output_fault = true;
+    m3x_request_output_change();
+    return true;
+}
+
+static void m3x_configure_output(unsigned int card)
+{
+    CARD = card;
+    _usb_earpods = card != 0;
+    _pcm_flags = PCM_OUT | (_usb_earpods ? PCM_NORESTART : 0);
+    builtin_pcm_sink.caps.samprs = _usb_earpods ? ear_pods_samprs : hw_freq_sampr;
+    builtin_pcm_sink.caps.num_samprs = _usb_earpods ? 1 : HW_NUM_FREQ;
+    builtin_pcm_sink.caps.default_freq = _usb_earpods ? 0 : HW_FREQ_DEFAULT;
+    builtin_pcm_sink.pending_freq = builtin_pcm_sink.caps.default_freq;
+    builtin_pcm_sink.configured_freq = -1U;
+    memset(&_config, 0, sizeof(_config));
+    _config.channels = 2;
+    _config.rate = builtin_pcm_sink.caps.samprs[builtin_pcm_sink.pending_freq];
+    _config.period_size = _usb_earpods ? 480 : 256;
+    _config.period_count = 4;
+    _config.format = PCM_FORMAT_S16_LE;
+    if (_usb_earpods)
+    {
+        _config.start_threshold = 480;
+        _config.stop_threshold = 1920;
+    }
+    else
+        audiohw_m3x_init();
+}
+
+static bool m3x_try_open_output(void)
+{
+    for (int retry = 0; retry <= (_usb_earpods ? 10 : 1); ++retry)
+    {
+        _alsa_handle = pcm_open(CARD, DEVICE, _pcm_flags, &_config);
+        if (pcm_is_ready(_alsa_handle) && pcm_prepare(_alsa_handle) == 0)
+            return true;
+        fprintf(stderr, "M3X output open/prepare failed card=%u: %s\n",
+                CARD, pcm_get_error(_alsa_handle));
+        pcm_close(_alsa_handle);
+        _alsa_handle = NULL;
+        if (_usb_earpods)
+        {
+            if (find_earpods_card() != (int)CARD)
+                break;
+            if (retry < 10)
+                usleep(200000);
+        }
+        else
+            audiohw_m3x_fallback_route();
+    }
+    return false;
+}
+
+static void m3x_open_output(void)
+{
+    if (!m3x_try_open_output())
+    {
+        if (!_usb_earpods)
+        {
+            panicf("M3X internal PCM unavailable");
+            return;
+        }
+        _ignored_usb_card = CARD;
+        m3x_configure_output(0);
+        if (!m3x_try_open_output())
+        {
+            panicf("M3X internal PCM unavailable after USB removal");
+            return;
+        }
+    }
+    fprintf(stderr, "M3X output: %s card=%u device=0 rate=%u\n",
+            _usb_earpods ? "Apple USB-C EarPods" : "internal DAC", CARD, _config.rate);
+}
+
+void pcm_m3x_set_output_callback(void (*callback)(void))
+{
+    pthread_mutex_lock(&_dma_suspended_mtx);
+    _output_callback = callback;
+    if (_output_change_pending && callback)
+        callback();
+    pthread_mutex_unlock(&_dma_suspended_mtx);
+}
+
+/* Called by the audio thread after halting the codec and stopping PCM. */
+void pcm_m3x_switch_output(void)
+{
+    pthread_mutex_lock(&_dma_suspended_mtx);
+    int usb = find_earpods_card();
+    unsigned int desired = usb >= 0 && usb != _ignored_usb_card ? usb : 0;
+    if (_alsa_handle && (desired != CARD || _output_fault))
+    {
+        _dma_stopped = 1;
+        if (!_usb_earpods)
+        {
+            audiohw_m3x_mute();
+            audiohw_m3x_fallback_route();
+        }
+        pcm_close(_alsa_handle);
+        _alsa_handle = NULL;
+        _pcm_buffer = NULL;
+        _pcm_buffer_size = 0;
+        m3x_configure_output(desired);
+        m3x_open_output();
+    }
+    _output_fault = false;
+    _output_change_pending = false;
+    pthread_cond_signal(&_dma_suspended_cond);
+    pthread_mutex_unlock(&_dma_suspended_mtx);
+}
+#endif
 
 
 static void sink_dma_init(void)
@@ -242,10 +457,23 @@ static void sink_dma_init(void)
         Bring up the AK4497s and the mixer controls they need. Hosted targets
         never call the generic audiohw_init(), so this is done here.
     */
-    audiohw_m3x_init();
+    int usb_card = find_earpods_card();
+    /* The M3X briefly removes and re-enumerates USB audio during Android
+     * takeover. A single scan in that gap selected the internal DAC even
+     * with EarPods attached. Allow a bounded enumeration grace period. */
+    for (int retry = 0; usb_card < 0 && retry < 20; ++retry)
+    {
+        usleep(100000);
+        usb_card = find_earpods_card();
+    }
+    m3x_configure_output(usb_card >= 0 ? usb_card : 0);
 #endif
 
 #ifdef DEBUG
+#ifdef SHANLING_M3X
+    if (!_usb_earpods)
+    {
+#endif
 
     /*
         DEBUG sink_dma_init: Access: 0x000009
@@ -345,6 +573,10 @@ static void sink_dma_init(void)
         mixer_close(mixer);
     }
 
+#ifdef SHANLING_M3X
+    }
+#endif
+
 #endif
 
     if(_alsa_handle != NULL)
@@ -354,6 +586,9 @@ static void sink_dma_init(void)
         return;
     }
 
+#ifdef SHANLING_M3X
+    m3x_open_output();
+#else
     /*
         Rockbox outputs 16 Bit/44.1kHz stereo by default.
 
@@ -373,35 +608,13 @@ static void sink_dma_init(void)
     _config.start_threshold   = 0;
     _config.stop_threshold    = 0;
     _config.silence_threshold = 0;
-
     DEBUGF("DEBUG %s: pcm_open(card=%d dev=%d flags=%u rate=%u ch=%u fmt=%d "
            "period_size=%u period_count=%u)", __func__, CARD, DEVICE, PCM_OUT,
            _config.rate, _config.channels, (int)_config.format,
            _config.period_size, _config.period_count);
 
     _alsa_handle = pcm_open(CARD, DEVICE, PCM_OUT, &_config);
-#ifdef SHANLING_M3X
-    if(! pcm_is_ready(_alsa_handle))
-    {
-        /*
-            The patched device tree permits the DAC route. If setup fails,
-            keep the player usable with a silent fallback route and report
-            the error. Never substitute a speaker route.
 
-            Fall back to opening the PCM with the default AFE route so Rockbox
-            stays usable (browsing, library, playback API). With no MI2S routed
-            the samples go nowhere: HPHL/HPHR and WSA are left at ZERO, so
-            nothing reaches the headphone amp or the speaker.
-        */
-        DEBUGF("ERROR %s: DAC route unusable (%s), falling back to the default route.",
-               __func__, pcm_get_error(_alsa_handle));
-
-        audiohw_m3x_fallback_route();
-
-        pcm_close(_alsa_handle);
-        _alsa_handle = pcm_open(CARD, DEVICE, PCM_OUT, &_config);
-    }
-#endif
     if(! pcm_is_ready(_alsa_handle))
     {
         DEBUGF("ERROR %s: pcm_open failed: %s.", __func__, pcm_get_error(_alsa_handle));
@@ -410,14 +623,6 @@ static void sink_dma_init(void)
     }
 
     DEBUGF("DEBUG %s: ALSA PCM frame buffer size: %d.", __func__, pcm_frames_to_bytes(_alsa_handle, pcm_get_buffer_size(_alsa_handle)));
-
-#ifdef SHANLING_M3X
-    if (pcm_prepare(_alsa_handle) != 0)
-    {
-        fprintf(stderr, "M3X PCM prepare failed: %s\n", pcm_get_error(_alsa_handle));
-        panicf("M3X PCM prepare failed: %s", pcm_get_error(_alsa_handle));
-        return;
-    }
 #endif
 
     /* Create pcm thread in the suspended state. */
@@ -442,7 +647,7 @@ static void sink_dma_start(const void *addr, size_t size)
         The M3X codec is an AK4497 pair reached over ALSA mixer controls, not
         an iBasso /sys/class/codec node.
     */
-    audiohw_m3x_unmute();
+    /* Unmute under the PCM lock below. */
 #else
     /*
         DX50
@@ -460,6 +665,10 @@ static void sink_dma_start(const void *addr, size_t size)
 #endif
 
     pthread_mutex_lock(&_dma_suspended_mtx);
+#ifdef SHANLING_M3X
+    if (!_usb_earpods)
+        audiohw_m3x_unmute();
+#endif
     _pcm_buffer      = addr;
     _pcm_buffer_size = size;
     _dma_stopped = 0;
@@ -539,11 +748,16 @@ static void sink_unlock(void)
 static void sink_set_freq(uint16_t freq)
 {
 #ifdef SHANLING_M3X
-    if (freq >= HW_NUM_FREQ)
-        return;
     pthread_mutex_lock(&_dma_suspended_mtx);
-#endif
+    if (freq >= builtin_pcm_sink.caps.num_samprs)
+    {
+        pthread_mutex_unlock(&_dma_suspended_mtx);
+        return;
+    }
+    unsigned int rate = builtin_pcm_sink.caps.samprs[freq];
+#else
     unsigned int rate = hw_freq_sampr[freq];
+#endif
 
     DEBUGF("DEBUG %s: Current sample rate: %u, next sampe rate: %u.", __func__, _config.rate, rate);
 
@@ -557,7 +771,11 @@ static void sink_set_freq(uint16_t freq)
         _config.rate = rate;
 
         pcm_close(_alsa_handle);
+#ifdef SHANLING_M3X
+        _alsa_handle = pcm_open(CARD, DEVICE, _pcm_flags, &_config);
+#else
         _alsa_handle = pcm_open(CARD, DEVICE, PCM_OUT, &_config);
+#endif
 
         if(! pcm_is_ready(_alsa_handle))
         {

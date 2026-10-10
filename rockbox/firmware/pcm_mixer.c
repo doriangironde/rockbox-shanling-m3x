@@ -539,6 +539,11 @@ void mixer_set_frequency(unsigned int samplerate)
 }
 
 /* Get output samplerate */
+void mixer_refresh_frequency(void)
+{
+    mixer_handle_sampr_change(SAMPR_NUM(pcm_get_frequency()));
+}
+
 unsigned int mixer_get_frequency(void)
 {
     return pcm_get_frequency();

@@ -153,6 +153,9 @@ void mixer_reset(void);
 /* Set output samplerate */
 void mixer_set_frequency(unsigned int samplerate);
 
+/* Refresh channel/frame sizing after a stopped sink changes capabilities. */
+void mixer_refresh_frequency(void);
+
 /* Get output samplerate */
 unsigned int mixer_get_frequency(void);
 

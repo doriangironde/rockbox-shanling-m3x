@@ -12,7 +12,8 @@ ROOT = Path(__file__).resolve().parents[3]
 
 class ServiceTests(unittest.TestCase):
     def run_service(self, cpu="35", battery="25000", disabled=False, later=None,
-                    runtime_state="stopped", display_state="stopped", child_exit=0):
+                    runtime_state="stopped", display_state="stopped", child_exit=0,
+                    already_running=False):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
             mod = base / "module"
@@ -38,7 +39,15 @@ class ServiceTests(unittest.TestCase):
 
             for command in ("start", "stop"):
                 executable(commands / command, f'echo {command} "$@" >> "{log}"\n')
-            executable(commands / "pidof", "exit 1\n")
+            if already_running == "later":
+                pidof_script = (f'if [ "$1" = rockbox ]; then\n'
+                                f'  if [ -e "{base}/pidof.checked" ]; then echo 1234; exit 0; fi\n'
+                                f'  touch "{base}/pidof.checked"\nfi\nexit 1\n')
+            elif already_running:
+                pidof_script = 'case "$1" in rockbox) echo 1234; exit 0;; esac\nexit 1\n'
+            else:
+                pidof_script = "exit 1\n"
+            executable(commands / "pidof", pidof_script)
             executable(commands / "getprop", f'case "$1" in init.svc.surfaceflinger) echo {display_state};; *) echo {runtime_state};; esac\n')
             # Accelerate launcher waits while keeping the real monitor/child race.
             executable(commands / "sleep", '/bin/sleep 0.02\n')
@@ -90,6 +99,15 @@ class ServiceTests(unittest.TestCase):
     def test_disabled_does_nothing(self):
         calls, log, disabled, _, _ = self.run_service(disabled=True)
         self.assertEqual((calls, log, disabled), ("", "", True))
+
+    def test_second_launch_leaves_existing_session_untouched(self):
+        for existing_session in (True, "later"):
+            with self.subTest(existing_session=existing_session):
+                calls, log, disabled, brightness, unlock = self.run_service(already_running=existing_session)
+                self.assertEqual(calls, "")
+                self.assertIn("Rockbox already running", log)
+                self.assertFalse(disabled)
+                self.assertEqual((brightness, unlock), ("123", ""))
 
     def test_display_stop_failure_refuses_to_launch(self):
         calls, log, disabled, brightness, unlock = self.run_service(display_state="running")

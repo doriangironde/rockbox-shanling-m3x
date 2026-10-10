@@ -50,6 +50,9 @@
 #include "general.h"
 #include "iap-usb.h"
 #include <stdio.h>
+#if defined(SHANLING_M3X) && !defined(SIMULATOR)
+#include "audiohw-m3x.h"
+#endif
 
 #ifdef HAVE_TAGCACHE
 #include "tagcache.h"
@@ -373,6 +376,9 @@ enum audio_start_playback_flags
 {
     AUDIO_START_RESTART = 0x1, /* "Restart" playback (flush _all_ tracks) */
     AUDIO_START_NEWBUF  = 0x2, /* Mark the audiobuffer as invalid */
+#if defined(SHANLING_M3X) && !defined(SIMULATOR)
+    AUDIO_START_M3X_OUTPUT = 0x4,
+#endif
 };
 
 static void audio_start_playback(const struct audio_resume_info *resume_info,
@@ -2989,6 +2995,28 @@ static void audio_on_track_changed(void)
     }
 }
 
+#if defined(SHANLING_M3X) && !defined(SIMULATOR)
+/* Codec and music PCM are already stopped by the restart path below. */
+static void audio_m3x_switch_output(void)
+{
+    voice_stop();
+    pcm_play_stop();
+    pcm_m3x_switch_output();
+    mixer_refresh_frequency();
+    sound_settings_apply();
+    /* Restore a manually selected internal rate when that output returns. */
+    const struct pcm_sink_caps *caps = pcm_current_sink_caps();
+    for (unsigned int i = 0; i < caps->num_samprs; ++i)
+    {
+        if (caps->samprs[i] == (unsigned int)global_settings.play_frequency)
+        {
+            mixer_set_frequency(caps->samprs[i]);
+            break;
+        }
+    }
+}
+#endif
+
 /* Begin playback from an idle state, transition to a new playlist or
    invalidate the buffer and resume (if playing).
    (usually Q_AUDIO_PLAY, Q_AUDIO_REMAKE_AUDIO_BUFFER) */
@@ -3076,7 +3104,15 @@ static void audio_start_playback(const struct audio_resume_info *resume_info,
     else
     {
         if (flags & AUDIO_START_RESTART)
+        {
+#if defined(SHANLING_M3X) && !defined(SIMULATOR)
+            if (flags & AUDIO_START_M3X_OUTPUT)
+            {
+                audio_m3x_switch_output();
+            }
+#endif
             return; /* Must already be playing */
+        }
 
         /* Cold playback start from a stopped state */
         logf("%s(%lu, %lu): starting", __func__, resume.elapsed,
@@ -3098,6 +3134,13 @@ static void audio_start_playback(const struct audio_resume_info *resume_info,
         play_status = PLAY_PLAYING;
         iap_on_play_status(play_status);
     }
+
+#if defined(SHANLING_M3X) && !defined(SIMULATOR)
+    if (flags & AUDIO_START_M3X_OUTPUT)
+    {
+        audio_m3x_switch_output();
+    }
+#endif
 
     /* Codec's position should be available as soon as it knows it */
     position_key = pcmbuf_get_position_key();
@@ -3668,6 +3711,14 @@ void audio_playback_handler(struct queue_event *ev)
             break;
 
         /** Miscellaneous messages **/
+#if defined(SHANLING_M3X) && !defined(SIMULATOR)
+        case Q_AUDIO_M3X_OUTPUT_CHANGED:
+            audio_start_playback(NULL, AUDIO_START_RESTART | AUDIO_START_NEWBUF |
+                                      AUDIO_START_M3X_OUTPUT);
+            if (play_status == PLAY_STOPPED)
+                return;
+            break;
+#endif
         case Q_AUDIO_REMAKE_AUDIO_BUFFER:
             /* buffer needs to be reinitialized */
             LOGFQUEUE("playback < Q_AUDIO_REMAKE_AUDIO_BUFFER");

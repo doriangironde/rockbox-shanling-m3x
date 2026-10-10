@@ -1,0 +1,6 @@
+id=rockbox_m3x
+name=Rockbox (Shanling M3X)
+version=0.2.0-dev
+versionCode=2
+author=rockbox-shanling-m3x
+description=Manual native Rockbox sessions on rooted M3X firmware 1.75. Android remains the default boot.

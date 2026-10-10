@@ -129,3 +129,93 @@ Android recovery was verified afterward; boot autostart remains disabled.
    mounting/removal. Its live device identity and filesystem are still unknown.
 6. Check charger changes, unplugged battery reporting, reboot and poweroff on
    hardware. Current-draw estimates and the voltage fallback are uncalibrated.
+
+## Sustained playback and rate changes — 2026-10-09
+
+The complete six-track FLAC album (11:13) played in order and ended naturally,
+with zero observed tinyalsa underruns, no repeated PCM pointers and no seek/time
+discontinuities. CPU sensor0 was 41–45 C, battery 32.2–33.0 C, average Rockbox CPU
+4.05% of one core and RSS 137320–137424 KiB. Continuous screen-off playback was
+observed for 8:38, then the user confirmed manually unlocking on track 6. Thus
+full-album playback passes, while full-album screen-off coverage remains partial.
+USB stayed connected; unplugged battery drain and analog dropouts are unmeasured.
+
+A synthetic eight-track M3U8 test passed MP3/FLAC changes with the screen locked,
+native output rates 44.1/48/88.2/96/176.4/192 kHz and zero observed underruns.
+The 32 kHz MP3 source output at 48 kHz. Output remains stereo S16_LE.
+
+Fixed a launcher refusal bug that could restore Android beneath an existing
+Rockbox process. Both early and post-cooling refusal paths pass replays; all 25
+host tests and the 56-module package check pass. The fixed launcher was backed
+up and installed. A real duplicate launch was refused without stopping playback
+or starting Android. Both completed tests restored Android and added no tombstones.
+The native binary and assets were not changed.
+
+External mmc1 is Qualcomm sdhc2 at 7864900.sdhci with driver sdhci_msm; no card was
+detected, so mounting/removal remains untested. Retained older linker SIGABRT
+records do not explain the original status-139 crash. Boot autostart remains
+disabled, original album playlist restored and volume -60 dB preserved.
+
+Repeatable tools: tools/m3x/build-playback-observer.py, observe-playback.c,
+playback-soak.sh, summarize-playback-soak.py and make-format-fixtures.py.
+Private report: validation/soak-20261009/REPORT.md. Full raw album/format traces
+are in validation/soak-20261009/device-full/ and
+validation/format-20261009/device-final/. Remaining normal launch/exit, battery,
+shuffle/repeat, plugins, calibration, power, suspend, card and installer checks
+are not implied by these passes.
+
+## No-ADB launch and return — 2026-10-09
+
+Added a small Android **Rockbox** launch app and a native main-menu **Return to
+Android** action. The app starts a detached, one-time root session through
+m3x-module/launch.sh; it keeps the real boot module disabled and reuses the normal
+thermal-protected launcher. There is no session duration timer. Startup normally
+takes about 20 seconds, including the delay for Magisk logging to finish.
+
+The return action uses normal Rockbox shutdown cleanup to save state and close
+audio, then exits status 0 instead of calling hardware power-off. The launcher
+restores Android. The Power button retains screen-lock and shutdown behavior.
+
+Two round trips passed on the device, including a direct Android home-icon tap,
+FLAC playback, Return to Android while playing, saved-position resume on the next
+launch, closed PCM and usable Android home afterward. Root access is granted in
+Magisk and the icon was added beside Poweramp on the player's home screen.
+All 30 host tests and 56 packaged-module checks passed. Physical shutdown remains
+unverified and is distinct from the new return action.
+
+Build/user instructions: android-launcher/README.md. APK:
+build-m3x-launcher/Rockbox-M3X.apk. Keep the private local signing key for updates.
+Device rollback files: /data/local/tmp/m3x-before-manual-launch-20261009/.
+Local rollback files: backups/manual-launch-20261009/.
+Private verification evidence: validation/manual-launch-20261009/.
+
+A subsequent normal reboot verified Android as the default, with Rockbox stopped,
+PCM closed, boot autostart disabled and the app still installed.
+
+## microSD basic access — 2026-10-10
+
+An inserted 128 GB SD card was detected on mmc1 and, at the user's request,
+formatted through Android as public FAT32 storage. Android mounts it at
+`/mnt/media_rw/external_sd1`; the development installation exposes a symlink
+from `/data/media/0/microSD`, shown as **Files → microSD** in native Rockbox.
+The card passed write/read hash checks, MP3/FLAC playback at 44.1/48 kHz with
+zero observed underruns, and Android unmount/remount with unchanged file hashes.
+The raw mount remained readable while Android app runtimes were stopped.
+Physical removal during playback and reboot persistence are still untested.
+Return to Android and eject before removing the card. Installer integration
+remains pending. Private evidence: validation/microsd-20261010/REPORT.md.
+
+## Standalone installation/update/rollback — 2026-10-10
+
+Added a checksummed standalone installer for the already-rooted M3X firmware
+1.75/API 25 setup with its existing I2C5 audio fix. It includes the native binary,
+matching assets, Android launch APK, framebuffer helper and manual-session
+scripts. Android remains the default boot. Updates preserve settings and music,
+keep/create the microSD link, and retain a private snapshot for rollback.
+Host failure-injection checks cover corrupted bundles, blocked launches, failed
+APK installation and partial copy recovery. A real device update and explicit
+rollback passed with unchanged binary/settings/resume/card-file hashes.
+Packaging emits deterministic installer and corresponding-source ZIPs, with
+fixed ZIP metadata and source/binary checksums. This is a development installer
+for the tested prerequisite setup, not a firmware image or Magisk-flashable ZIP.
+See tools/m3x/INSTALL.md. Private evidence: validation/installer-20261010/.

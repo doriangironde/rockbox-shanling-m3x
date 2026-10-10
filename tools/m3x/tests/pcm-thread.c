@@ -24,6 +24,7 @@ void panicf(const char *fmt, ...)
 }
 void audiohw_m3x_init(void) {}
 void audiohw_m3x_unmute(void) {}
+void audiohw_m3x_mute(void) {}
 void audiohw_m3x_fallback_route(void) {}
 struct pcm *pcm_open(unsigned int c, unsigned int d, unsigned int flags, struct pcm_config *config)
 {

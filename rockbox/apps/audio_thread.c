@@ -36,6 +36,13 @@
 #include "voice_thread.h"
 #include "talk.h"
 #include "settings.h"
+#if defined(SHANLING_M3X) && !defined(SIMULATOR)
+#include "audiohw-m3x.h"
+static void m3x_output_changed(void)
+{
+    audio_queue_post(Q_AUDIO_M3X_OUTPUT_CHANGED, 0);
+}
+#endif
 
 /* Macros to enable logf for queues
    logging on SYS_TIMEOUT can be disabled */
@@ -69,6 +76,9 @@ static void NORETURN_ATTR audio_thread(void)
     ev.id = Q_NULL; /* something not in switch below */
 
     pcm_postinit();
+#if defined(SHANLING_M3X) && !defined(SIMULATOR)
+    pcm_m3x_set_output_callback(m3x_output_changed);
+#endif
 
     while (1)
     {
@@ -82,6 +92,9 @@ static void NORETURN_ATTR audio_thread(void)
 
         /* Playback has to handle these, even if not playing */
         case Q_AUDIO_REMAKE_AUDIO_BUFFER:
+#if defined(SHANLING_M3X) && !defined(SIMULATOR)
+        case Q_AUDIO_M3X_OUTPUT_CHANGED:
+#endif
 #ifdef HAVE_DISK_STORAGE
         case Q_AUDIO_UPDATE_WATERMARK:
 #endif

@@ -543,6 +543,19 @@ MENUITEM_RETURNVALUE(playlists, ID2P(LANG_PLAYLISTS), GO_TO_PLAYLISTS_SCREEN,
 MENUITEM_RETURNVALUE(system_menu_, ID2P(LANG_SYSTEM), GO_TO_SYSTEM_SCREEN,
                      NULL, Icon_System_menu);
 
+#if defined(SHANLING_M3X) && !defined(SIMULATOR)
+static int return_to_android(void)
+{
+    m3x_set_android_return(true);
+    default_event_handler(SYS_POWEROFF);
+    /* Shutdown can be refused while the database is busy. Keep Power normal. */
+    m3x_set_android_return(false);
+    return 0;
+}
+MENUITEM_FUNCTION(android_return_item, 0, "Return to Android",
+                  return_to_android, NULL, Icon_System_menu);
+#endif
+
 struct menu_item_ex root_menu_;
 static struct menu_callback_with_desc root_menu_desc = {
         item_callback, ID2P(LANG_ROCKBOX_TITLE), Icon_Rockbox };
@@ -566,6 +579,9 @@ static struct menu_table menu_table[] = {
     { "plugins", &rocks_browser },
     { "system_menu", &system_menu_ },
     { "shortcuts", &shortcut_menu },
+#if defined(SHANLING_M3X) && !defined(SIMULATOR)
+    { "android", &android_return_item },
+#endif
 };
 #define MAX_MENU_ITEMS (sizeof(menu_table) / sizeof(struct menu_table))
 static struct menu_item_ex *root_menu__[MAX_MENU_ITEMS];

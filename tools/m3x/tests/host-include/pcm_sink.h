@@ -1,7 +1,8 @@
 #ifndef M3X_TEST_PCM_SINK_H
 #define M3X_TEST_PCM_SINK_H
 struct pcm_sink {
-    struct { const unsigned int *samprs; unsigned int num_samprs, default_freq; int volume_type; } caps;
+    struct { const unsigned long *samprs; unsigned int num_samprs, default_freq; int volume_type; } caps;
+    unsigned long pending_freq, configured_freq;
     struct {
         void (*init)(void), (*postinit)(void);
         void (*set_freq)(uint16_t);
@@ -10,4 +11,5 @@ struct pcm_sink {
         void (*stop)(void);
     } ops;
 };
+extern struct pcm_sink builtin_pcm_sink;
 #endif

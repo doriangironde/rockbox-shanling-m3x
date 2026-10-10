@@ -36,4 +36,8 @@ void audiohw_m3x_unmute(void);
 /* AK4497 "mute control" = mute. */
 void audiohw_m3x_mute(void);
 
+/* Native PCM hotplug: callback only posts to the audio thread. */
+void pcm_m3x_set_output_callback(void (*callback)(void));
+void pcm_m3x_switch_output(void);
+
 #endif /* _AUDIOHW_M3X_H_ */

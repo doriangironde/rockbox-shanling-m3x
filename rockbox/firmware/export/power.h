@@ -77,6 +77,10 @@ bool power_input_present(void);
 #endif /* CONFIG_CHARGING */
 
 void power_off(void);
+#if defined(SHANLING_M3X) && !defined(SIMULATOR)
+/* Select process exit after the normal shutdown cleanup, rather than power off. */
+void m3x_set_android_return(bool enabled);
+#endif
 void ide_power_enable(bool on);
 
 #if CONFIG_CHARGING >= CHARGING_MONITOR

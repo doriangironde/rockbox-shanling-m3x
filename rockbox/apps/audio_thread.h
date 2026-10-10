@@ -87,6 +87,9 @@ enum
 #endif
     /* -> audio */
     Q_AUDIO_REMAKE_AUDIO_BUFFER, /* buffer needs to be reinitialized */
+#if defined(SHANLING_M3X) && !defined(SIMULATOR)
+    Q_AUDIO_M3X_OUTPUT_CHANGED,
+#endif
 };
 
 /* (*) If you change these, you must check audio_clear_track_notifications
