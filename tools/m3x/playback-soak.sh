@@ -25,12 +25,12 @@ umask 022
 mkdir -p "$STAGE"
 cp "$MOD/service.sh" "$STAGE/service.sh" || exit 1
 ln -s "$MOD/rockbox" "$STAGE/rockbox" || exit 1
+ln -s "$MOD/fbpan" "$STAGE/fbpan" || exit 1
 rm -f "$STAGE/disable"
 cp /data/media/0/.rockbox/config.cfg "$OUT/config.before.cfg"
 cp /data/media/0/.rockbox/.playlist_control "$OUT/playlist.before" 2>/dev/null
 ls -l /data/tombstones > "$OUT/tombstones.before"
 dmesg > "$OUT/kernel.before.txt"
-LOG_START=$(wc -c < /data/local/tmp/rockbox-m3x.log)
 for zone in /sys/class/thermal/thermal_zone*; do
     case "$(cat "$zone/type")" in
         tsens_tz_sensor0) CPU=$zone/temp;;
@@ -156,7 +156,7 @@ for service in zygote zygote_secondary surfaceflinger thermal-engine; do
 done
 ls -l /data/tombstones > "$OUT/tombstones.after"
 dmesg > "$OUT/kernel.after.txt"
-tail -c +$((LOG_START + 1)) /data/local/tmp/rockbox-m3x.log > "$OUT/player.log"
+cp "$STAGE/rockbox.log" "$OUT/player.log"
 chmod -R a+rX "$OUT"
 echo complete > "$OUT/done"
 trap - EXIT HUP INT TERM

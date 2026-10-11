@@ -149,12 +149,6 @@ void backlight_hw_off(void)
 }
 
 
-/*
-    Prevent excessive backlight_hw_brightness usage.
-    Required for proper seeking.
-*/
-
-
 void backlight_hw_brightness(int brightness)
 {
     if(brightness > MAX_BRIGHTNESS_SETTING)

@@ -179,7 +179,6 @@ def main():
         line = line.replace("-%s.bmp" % RES_KEY, "-%s.bmp" % RES_NEW)
         # Keep the leading comment block but note where it came from.
         out.append(scale_line(line.rstrip("\n")))
-    body = "\n".join(out) + "\n"
 
     header = [
         "# Cabbie v2.0 for the Shanling M3X (768x1280)",

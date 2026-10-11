@@ -145,6 +145,19 @@ int main(void)
     assert(read_buttons(767, 1279) == BUTTON_TOUCHSCREEN);
     abs_event(ABS_MT_TRACKING_ID, -1); sync_touch();
     assert(read_buttons(767, 1279) == 0);
+    /* A UI lock change must take effect on the next poll even if evdev has
+     * no new frame. Disable/enable between polls still requires a lift. */
+    contact(0, 545, 720, 1280); sync_touch();
+    assert(read_buttons(767, 1279) == BUTTON_TOUCHSCREEN);
+    touchscreen_enable_device(false);
+    assert(read_buttons(767, 1279) == 0);
+    touchscreen_enable_device(true);
+    assert(read_buttons(767, 1279) == 0);
+    touchscreen_enable_device(false);
+    touchscreen_enable_device(true);
+    assert(read_buttons(767, 1279) == 0);
+    abs_event(ABS_MT_TRACKING_ID, -1); sync_touch();
+    assert(read_buttons(767, 1279) == 0);
     /* Reset the last coordinate for the key-only assertions below. */
     contact(0, 55, 0, 0); sync_touch();
     assert(read_buttons(0, 0) == BUTTON_TOUCHSCREEN);

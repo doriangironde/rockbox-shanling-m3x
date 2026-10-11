@@ -17,11 +17,6 @@
 #include <sys/ioctl.h>
 #include <linux/i2c-dev.h>
 
-/* Not all (older) i2c-dev.h headers define these */
-#ifndef I2C_SLAVE_FORCE
-#define I2C_SLAVE_FORCE  0x0706
-#endif
-
 int main(int argc, char **argv)
 {
     const char *dev;
@@ -42,10 +37,9 @@ int main(int argc, char **argv)
 
     fd = open(dev, O_RDWR);
     if (fd < 0) { perror("open"); return 1; }
-    /* The kernel ak4497 driver already owns this address, so plain I2C_SLAVE
-     * returns EBUSY; force-claim it instead (read-only, safe when idle). */
-    if (ioctl(fd, I2C_SLAVE_FORCE, slave) < 0 && ioctl(fd, I2C_SLAVE, slave) < 0) {
-        perror("I2C_SLAVE(_FORCE)"); close(fd); return 1;
+    /* Respect kernel ownership: even a register-pointer read can race a driver. */
+    if (ioctl(fd, I2C_SLAVE, slave) < 0) {
+        perror("I2C_SLAVE"); close(fd); return 1;
     }
 
     printf("# device=%s slave=0x%02x nbytes=%d width=%d regs 0x%02x..0x%02x\n",

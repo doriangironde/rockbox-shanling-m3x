@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -88,8 +89,11 @@ elif sys.argv[1] == 'install':
         shutil.copyfile(src, apk)
         print('Success')
 elif sys.argv[1] == 'uninstall':
-    apk.unlink(missing_ok=True)
-    print('Success')''')
+    if (base / 'fail-uninstall').exists():
+        print('Failure [injected failure]')
+    else:
+        apk.unlink(missing_ok=True)
+        print('Success')''')
         self.env = dict(os.environ, PATH=str(self.bin) + os.pathsep + os.environ['PATH'])
         self.checksums()
 
@@ -134,6 +138,9 @@ elif sys.argv[1] == 'uninstall':
         result = self.run_install()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual((self.mod / 'rockbox').read_bytes(), b'new-player')
+        self.assertEqual((self.mod / 'fbpan').read_bytes(), b'new-helper')
+        self.assertEqual((self.mod / 'fbpan').stat().st_mode & 0o777, 0o755)
+        self.assertFalse(self.helper.exists())
         self.assertEqual((self.assets / 'config.cfg').read_bytes(), b'volume: -43\n')
         self.assertEqual((self.assets / '.playlist_control').read_bytes(), b'old-resume')
         self.assertEqual((self.assets / 'custom playlist.m3u8').read_bytes(), b'/Music/my-song.mp3\n')
@@ -144,6 +151,20 @@ elif sys.argv[1] == 'uninstall':
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assert_old()
         self.assertFalse(self.card.is_symlink())
+
+    def test_module_helper_update_and_rollback_do_not_recreate_legacy_helper(self):
+        self.helper.unlink()
+        self.put(self.mod / 'fbpan', b'previous module helper')
+        (self.mod / 'fbpan').chmod(0o755)
+        result = self.run_install()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.mod / 'fbpan').read_bytes(), b'new-helper')
+        self.assertFalse(self.helper.exists())
+        result = self.run_install('rollback', self.snapshot())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.mod / 'fbpan').read_bytes(), b'previous module helper')
+        self.assertFalse(self.helper.exists())
+        self.assertEqual((self.assets / 'config.cfg').read_bytes(), b'volume: -43\n')
 
     def test_failed_apk_update_automatically_restores_native_assets_and_settings(self):
         (self.base / 'fail-pm').touch()
@@ -162,11 +183,68 @@ elif sys.argv[1] == 'uninstall':
         self.assertFalse(self.backups.exists())
         self.assert_old()
 
+    def test_unlisted_payload_file_is_rejected_before_replacement(self):
+        self.put(self.bundle / 'payload/module/unverified.sh', b'not checksummed')
+        result = self.run_install()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('missing or unexpected files', result.stderr)
+        self.assertFalse(self.backups.exists())
+        self.assert_old()
+
+    def test_bundle_symlinks_are_rejected_even_when_unlisted(self):
+        (self.bundle / 'payload/module/unchecked').symlink_to(self.mod, target_is_directory=True)
+        result = self.run_install()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('must not contain symlinks', result.stderr)
+        self.assertFalse(self.backups.exists())
+        self.assert_old()
+
+    def test_duplicate_manifest_entries_cannot_hide_an_unlisted_file(self):
+        self.put(self.bundle / 'payload/module/unverified.sh', b'not checksummed')
+        sums = self.bundle / 'SHA256SUMS'
+        sums.write_text(sums.read_text() + sums.read_text().splitlines()[0] + '\n')
+        result = self.run_install()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Invalid or duplicate bundle checksum path', result.stderr)
+        self.assertFalse(self.backups.exists())
+        self.assert_old()
+
+    def test_manifest_path_outside_bundle_is_rejected_before_replacement(self):
+        external = self.base / 'external'
+        external.write_bytes(b'outside bundle')
+        sums = self.bundle / 'SHA256SUMS'
+        sums.write_text(sums.read_text() + hashlib.sha256(external.read_bytes()).hexdigest()
+                        + '  ../external\n')
+        result = self.run_install()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Invalid or duplicate bundle checksum path', result.stderr)
+        self.assertFalse(self.backups.exists())
+        self.assert_old()
+
     def test_partial_module_copy_failure_restores_already_replaced_assets(self):
         (self.base / 'fail-stage').touch()
         result = self.run_install()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('Previous installation restored', result.stderr)
+        self.assert_old()
+
+    def test_helper_staging_never_writes_through_a_shell_controlled_symlink(self):
+        victim = self.base / 'unrelated-root-file'
+        victim.write_bytes(b'keep this file')
+        cp = shutil.which('cp')
+        self.command('cp', f'''for target do :; done
+case "$target" in
+    "{self.helper}.new-"*) ln -s "{victim}" "$target";;
+esac
+exec "{cp}" "$@"''')
+        result = self.run_install()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(victim.read_bytes(), b'keep this file')
+        self.assertEqual((self.mod / 'fbpan').read_bytes(), b'new-helper')
+        self.assertFalse(self.helper.exists())
+        result = self.run_install('rollback', self.snapshot())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(victim.read_bytes(), b'keep this file')
         self.assert_old()
 
     def test_preflight_is_read_only_and_rejects_wrong_firmware_or_running_player(self):
@@ -204,6 +282,26 @@ elif sys.argv[1] == 'uninstall':
         self.assertEqual((self.card / 'keep.txt').read_text(), 'existing user folder')
         self.assertTrue((self.base / 'data/media/0/Music/my-song.mp3').exists())
 
+    def test_failed_first_install_launcher_uninstall_reports_incomplete_restore(self):
+        shutil.rmtree(self.mod)
+        shutil.rmtree(self.assets)
+        self.helper.unlink()
+        self.apk.unlink()
+        result = self.run_install()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        (self.base / 'fail-uninstall').touch()
+        snapshot = self.snapshot()
+        result = self.run_install('rollback', snapshot)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Restore failed; snapshot retained:', result.stderr)
+        self.assertEqual(self.apk.read_bytes(), b'new-apk')
+        self.assertTrue((snapshot / 'snapshot-ready').is_file())
+        self.assertFalse((self.base / 'data/adb/rockbox-m3x-manual/launch.lock').exists())
+        (self.base / 'fail-uninstall').unlink()
+        result = self.run_install('rollback', snapshot)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.apk.exists())
+
 
 class BundleTests(unittest.TestCase):
     @staticmethod
@@ -235,3 +333,76 @@ class BundleTests(unittest.TestCase):
             (root / 'unpacked/payload/test file').write_bytes(b'corrupted')
             with self.assertRaisesRegex(ValueError, 'Checksum mismatch'):
                 installer.verify_bundle(root / 'unpacked')
+
+    def test_host_verification_rejects_unlisted_directory_and_metadata_symlinks(self):
+        installer = self.load('install')
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            payload = root / 'payload'
+            payload.mkdir()
+            data = b'verified'
+            (payload / 'file').write_bytes(data)
+            (root / 'SHA256SUMS').write_text(hashlib.sha256(data).hexdigest() + '  payload/file\n')
+            for name, target in (('unchecked', payload), ('.DS_Store', payload / 'file')):
+                with self.subTest(name=name):
+                    link = root / name
+                    link.symlink_to(target)
+                    with self.assertRaisesRegex(ValueError, 'must not contain symlinks'):
+                        installer.verify_bundle(root)
+                    link.unlink()
+            installer.verify_bundle(root)
+
+    def test_asset_archive_rejects_private_state_path_aliases_and_symlinks(self):
+        import zipfile
+        package = self.load('package-installer')
+        with tempfile.TemporaryDirectory() as temp:
+            archive = Path(temp) / 'assets.zip'
+            for name in ('.rockbox//config.cfg', '.rockbox/./config.cfg',
+                         '.rockbox\\config.cfg', '.rockbox/../config.cfg',
+                         '.rockbox/config.cfg', '.rockbox/.playlist_control'):
+                with self.subTest(name=name):
+                    with zipfile.ZipFile(archive, 'w') as z:
+                        z.writestr(name, b'private settings')
+                    with self.assertRaises(ValueError):
+                        package.asset_files(archive)
+            with zipfile.ZipFile(archive, 'w') as z:
+                info = zipfile.ZipInfo('.rockbox/codecs/link.codec')
+                info.create_system = 3
+                info.external_attr = (0o120000 | 0o777) << 16
+                z.writestr(info, b'/outside')
+            with self.assertRaisesRegex(ValueError, 'symlink asset'):
+                package.asset_files(archive)
+            with zipfile.ZipFile(archive, 'w') as z:
+                z.writestr('.rockbox/codecs/test.codec', b'codec')
+                z.writestr('.rockbox/wps/a theme.wps', b'theme')
+            self.assertEqual(package.asset_files(archive), {
+                '.rockbox/codecs/test.codec': b'codec', '.rockbox/wps/a theme.wps': b'theme'})
+
+    def test_package_validation_rejects_stale_modules_with_python_optimization(self):
+        import zipfile
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            script = root / 'tools/m3x/check-package.py'
+            script.parent.mkdir(parents=True)
+            shutil.copyfile(ROOT / 'tools/m3x/check-package.py', script)
+            build = root / 'build-m3x'
+            module = build / 'lib/rbcodec/codecs/mpa.codec'
+            module.parent.mkdir(parents=True)
+            module.write_bytes(b'current codec')
+            (build / 'rockbox-info.txt').write_bytes(b'current build info')
+            archive = build / 'rockbox.zip'
+            with zipfile.ZipFile(archive, 'w') as z:
+                z.writestr('.rockbox/codecs/mpa.codec', b'stale codec')
+                z.writestr('.rockbox/rockbox-info.txt', b'current build info')
+            result = subprocess.run([sys.executable, '-O', str(script)],
+                                    capture_output=True, text=True, timeout=15)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('stale packaged module', result.stderr)
+            self.assertNotIn('"result": "PASS"', result.stdout)
+            with zipfile.ZipFile(archive, 'w') as z:
+                z.writestr('.rockbox/codecs/mpa.codec', module.read_bytes())
+                z.writestr('.rockbox/rockbox-info.txt', b'current build info')
+            result = subprocess.run([sys.executable, '-O', str(script)],
+                                    capture_output=True, text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('"result": "PASS"', result.stdout)

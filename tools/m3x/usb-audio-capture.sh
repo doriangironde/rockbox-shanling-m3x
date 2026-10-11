@@ -81,7 +81,8 @@ snapshot() {
 
 finish() {
     dmesg >"$OUT/kernel.after.txt" 2>&1
-    tail -n 150 /data/local/tmp/rockbox-m3x.log >"$OUT/player-tail.txt" 2>&1
+    tail -n 150 /data/adb/rockbox-m3x-manual/session/rockbox.log \
+        /data/adb/modules/rockbox_m3x/rockbox.log >"$OUT/player-tail.txt" 2>&1
     echo "Capture finished; no audio or USB settings were changed." >"$OUT/done"
 }
 trap 'exit 1' HUP INT TERM

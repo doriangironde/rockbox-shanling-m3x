@@ -1034,7 +1034,7 @@ static int shrink_callback(int handle, unsigned hints, void* start, size_t old_s
     {   /* inline case Q_AUDIO_STOP (audio_hard_stop() response
          * if we're in the audio thread */
         audio_stop_playback();
-        queue_clear(&audio_queue);
+        audio_queue_clear();
     }
     else
         audio_queue_send(Q_AUDIO_STOP, 1);
@@ -3000,6 +3000,7 @@ static void audio_on_track_changed(void)
 static void audio_m3x_switch_output(void)
 {
     voice_stop();
+    pcm_play_lock();
     pcm_play_stop();
     pcm_m3x_switch_output();
     mixer_refresh_frequency();
@@ -3014,6 +3015,7 @@ static void audio_m3x_switch_output(void)
             break;
         }
     }
+    pcm_play_unlock();
 }
 #endif
 
@@ -3652,7 +3654,7 @@ void audio_playback_handler(struct queue_event *ev)
             LOGFQUEUE("playback < Q_AUDIO_STOP");
             audio_stop_playback();
             if (ev->data != 0)
-                queue_clear(&audio_queue);
+                audio_queue_clear();
             return; /* no more playback */
 
         case Q_AUDIO_PAUSE:

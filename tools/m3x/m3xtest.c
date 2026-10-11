@@ -20,6 +20,8 @@
 #include <math.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <limits.h>
+#include <stdint.h>
 
 #include "tinyalsa/asoundlib.h"
 
@@ -239,11 +241,23 @@ static int play_tone(unsigned dev, double hz, double secs, unsigned rate,
 {
     struct pcm_config cfg;
     struct pcm *p;
-    unsigned int frames_per_buf, bytes_per_frame, buf_bytes, chunk;
-    unsigned int cycle, i, c;
+    unsigned int frames_per_buf, bytes_per_frame, buf_bytes;
     unsigned char *buf;
     unsigned long total, done = 0;
     int rc = 0;
+    bool s16 = fmt == PCM_FORMAT_S16_LE && bits == 16;
+    bool s24 = fmt == PCM_FORMAT_S24_LE && (bits == 24 || bits == 32);
+    bool s32 = fmt == PCM_FORMAT_S32_LE && bits == 32;
+    unsigned sample_bytes = s16 ? 2 : 4;
+    double peak = s16 ? 32767.0 : s24 ? 8388607.0 : 2147483647.0;
+
+    if ((!s16 && !s24 && !s32) || !rate || !ch ||
+        ch > UINT_MAX / sample_bytes || !isfinite(hz) || hz <= 0 ||
+        hz > rate / 2.0 || !isfinite(secs) || secs <= 0 ||
+        secs * rate < 1 || secs >= (double)ULONG_MAX / rate / ch / sample_bytes) {
+        fprintf(stderr, "invalid tone frequency, duration, channels or sample format\n");
+        return 1;
+    }
 
     memset(&cfg, 0, sizeof(cfg));
     cfg.channels       = ch;
@@ -261,49 +275,45 @@ static int play_tone(unsigned dev, double hz, double secs, unsigned rate,
         return 1;
     }
     frames_per_buf = pcm_get_buffer_size(p);
-    bytes_per_frame = ch * (bits / 8);
+    bytes_per_frame = ch * sample_bytes;
+    if (!frames_per_buf || frames_per_buf > UINT_MAX / bytes_per_frame) {
+        fprintf(stderr, "invalid PCM buffer size\n");
+        pcm_close(p);
+        return 1;
+    }
     buf_bytes = frames_per_buf * bytes_per_frame;
+    buf = malloc(buf_bytes);
+    if (!buf) { pcm_close(p); return 1; }
+    total = (unsigned long)(rate * secs);
     printf("opened card0 dev%u: %u ch, %u Hz, %u bits, fmt=%u, buffer=%u frames\n",
            dev, ch, rate, bits, fmt, frames_per_buf);
-
-    cycle = (unsigned int)(rate / hz);
-    if (cycle < 2) cycle = 2;
-
-    buf = calloc(1, buf_bytes);
-    if (!buf) { pcm_close(p); return 1; }
-    for (i = 0; i < cycle; i++) {
-        double s = sin(2.0 * M_PI * (double)i / (double)cycle) * 0.35;
-        for (c = 0; c < ch; c++) {
-            int v = (int)(s * (c == 0 ? 1.0 : 0.7) * 2147483647.0);
-            if (bits == 16) {
-                short sv = (short)v;
-                memcpy(buf + (i * ch + c) * 2, &sv, 2);
-            } else {
-                int iv = v;
-                memcpy(buf + (i * ch + c) * 4, &iv, 4);
-            }
-        }
-    }
-
-    chunk = (cycle < frames_per_buf) ? cycle : frames_per_buf;
-    total = (unsigned long)((double)rate * (double)ch * (double)(bits / 8) * secs);
-    printf("playing %.1f s of %.0f Hz (%.2f s per loop) ...\n",
-           secs, hz, (double)cycle / (double)rate);
+    printf("playing %.1f s of %.0f Hz ...\n", secs, hz);
     fflush(stdout);
 
     while (done < total) {
-        unsigned int n = chunk;
-        if (done + (unsigned long)n * bytes_per_frame > total)
-            n = (unsigned int)((total - done) / bytes_per_frame);
-        if (n == 0) break;
-        if (pcm_write(p, buf + (done % (unsigned long)buf_bytes), n * bytes_per_frame) < 0) {
-            fprintf(stderr, "write error after %lu bytes: %s\n", done, pcm_get_error(p));
+        unsigned int n = total - done < frames_per_buf ? (unsigned int)(total - done)
+                                                       : frames_per_buf;
+        for (unsigned int i = 0; i < n; ++i) {
+            double s = sin(2.0 * M_PI * hz * (double)(done + i) / rate) * 0.35;
+            for (unsigned int c = 0; c < ch; ++c) {
+                double value = s * (c == 0 ? 1.0 : 0.7) * peak;
+                if (s16) {
+                    int16_t sample = (int16_t)value;
+                    memcpy(buf + (i * ch + c) * sample_bytes, &sample, sizeof(sample));
+                } else {
+                    int32_t sample = (int32_t)value;
+                    memcpy(buf + (i * ch + c) * sample_bytes, &sample, sizeof(sample));
+                }
+            }
+        }
+        if (pcm_write(p, buf, n * bytes_per_frame) < 0) {
+            fprintf(stderr, "write error after %lu frames: %s\n", done, pcm_get_error(p));
             rc = 1;
             break;
         }
-        done += (unsigned long)n * bytes_per_frame;
+        done += n;
     }
-    printf("wrote %lu / %lu bytes (rc=%d)\n", done, total, rc);
+    printf("wrote %lu / %lu frames (rc=%d)\n", done, total, rc);
     free(buf);
     pcm_close(p);
     return rc;
@@ -439,6 +449,11 @@ int main(int argc, char **argv)
             "  m3xtest route2 ...     same, but deliberately slow (100ms between steps)\n"
             "  m3xtest tone <dev> [hz] [s] [rate] [ch] [bits] [fmt]\n"
             "        fmt: 0=S16_LE 1=S32_LE 3=S24_LE (default 1)\n");
+        return 1;
+    }
+    if (((!strcmp(argv[1], "set") || !strcmp(argv[1], "setpct")) && argc < 4) ||
+        ((!strcmp(argv[1], "sweep") || !strcmp(argv[1], "caps")) && argc < 3)) {
+        fprintf(stderr, "missing arguments for %s\n", argv[1]);
         return 1;
     }
     if (!strcmp(argv[1], "mixer"))  return (argc > 2) ? show_ctl(argv[2]) : list_mixer();

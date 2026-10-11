@@ -1,6 +1,6 @@
 What this change does: The M3X workspace now separates public source, generated builds and private recovery/evidence files. This maintenance pass removes concrete dead weight and fixes demonstrated installer, graphics, input, audio and diagnostic defects rather than replacing working code based on its authorship.
 
-# Ponytail review — 2026-10-10
+# Ponytail review — 2026-10-10; hardware follow-up — 2026-10-11
 
 Ponytail 5.1.0 was installed from `DietrichGebert/ponytail` using the documented
 omp marketplace commands. Its review instructions were read and applied here.
@@ -146,6 +146,13 @@ merely because AI helped write it.
     - **Fix:** Keep an explicit passive hook, require the target hook, delete dead blocks/copies/comments, correct format types and replace chronological README clutter with task-oriented guides.
     - **If we skipped it:** Readers would have to distinguish obsolete attempts from working paths, and integration omissions could reach runtime rather than fail linking.
 
+21. **Playback telemetry discarded untagged music** (`tools/m3x/summarize-playback-soak.py`).
+    - **What this is:** The host report interprets read-only player metadata and kernel PCM samples.
+    - **Problem:** The physical licensed MP3 reported `track=-1`; the unsigned parser and positive-track filter discarded its real playback.
+    - **Fix:** Accept signed track numbers and identify playback by a running PCM stream plus a nonempty file path. Cleared end-of-stream metadata stays excluded; timing, lock and underrun criteria remain unchanged.
+    - **Check:** The regression failed before the fix, then passed in the 61-test suite. The complete physical untagged-MP3 capture also passed.
+    - **If we skipped it:** Valid untagged music would be reported as having no playback evidence.
+
 ## Exercised verification
 
 | Check | Observed result |
@@ -160,14 +167,40 @@ merely because AI helped write it.
 | Documentation navigation | All checked local README/guide links existed |
 
 The simulator menu/playback PNGs were visually inspected. The tested native
-build retains its existing debug configuration. No device session, ADB command,
-root installation, firmware flash, audible output or signing-key replacement
-was performed during this maintenance pass.
+build retains its existing debug configuration. The initial 2026-10-10 pass made
+no device connection, root installation, firmware flash, audible-output check
+or signing-key replacement; the subsequent hardware checks are recorded below.
 
 The system Python lacked Pillow and its pkg-config did not see Homebrew SDL2.
 The existing Homebrew Python/SDL2 installation completed the smoke runs; PATH
 requirements are documented. Existing fixed-point host warnings and Pillow's
 future `getdata` deprecation remain; no warning was suppressed.
+
+## Hardware follow-up — 2026-10-11
+
+The maintained `dev-a0ee34178f21` installer was exercised on the rooted firmware
+1.75/API 25 M3X. No boot image or firmware was flashed.
+
+| Check | Observed result |
+| --- | --- |
+| Update, explicit rollback and reinstallation | Passed; original native/helper/config/playlist hashes restored by rollback; updated native/helper and original user settings retained after reinstallation |
+| ARM64 input/battery and filesystem replays | Passed on the device; live battery read worked and an exclusive temporary playlist-control file was written, synced, rotated, reopened and removed |
+| Actual native UI and Android app | Menu/files/playback framebuffers inspected; app launch and native Return to Android exited 0; Android home restored, PCM closed and launch lock released |
+| Eight-track MP3/FLAC rate sweep | All tracks completed in order with zero reported underruns; **strict report remained INCOMPLETE_OR_FAILED**: two sampled rate-transition reopenings and a late test lock request |
+| Separate continuous untagged MP3 | **PASS**; 134.05 seconds observed, 126.21 seconds continuously locked/dark, zero reported underruns and no observed timing/pointer stalls |
+| Duplicate service launch | Refused with status 1 without restoring Android over the active player |
+| Complete regression suite | **61 tests passed**, including the new untagged-track/end-of-stream regression |
+
+Touch and Power events were injected through the real input devices; the input
+replay used pipes. Neither establishes a human-operated mechanical-button or
+finger test. USB remained connected and charging. Software PCM progress does
+not establish audible output or gapless transitions across rate changes.
+
+The exact binary/helper hashes, sampled rates, recovery and remaining limits
+are in [the validation record](../M3X_OFFLINE_CHECKLIST.md#maintenance-build-on-hardware--2026-10-11).
+Raw captures and rollback backups remain private under `local/validation/`.
+Only the unique test music/upload/controller directories were removed from the
+player; user settings and playlist state were restored byte-for-byte.
 
 ## Workspace cleanup
 
@@ -182,8 +215,11 @@ were preserved. `publish/` remains an export snapshot; root files are canonical.
 Verdict: fix 1 and 2 before broader hardened/plugin-hotplug release claims.
 The development cleanup and exercised host/simulator workflows pass.
 
-Lean: -407 documentation lines applied across the README and tool guide.
+Initial lean cleanup: -407 documentation lines across the README and tool guide.
 Dead FFT conversion, I2C force-claim, optional-hook scaffolding, commented LCD
 attempt and unused text allocation removed without a blanket rewrite.
 
-Not checked: physical hardware, Android app storage permissions, actual power/USB-loss recovery, other target cross-builds or an exhaustive audit of unrelated upstream/kernel code.
+Still not checked: analog output/dropouts, unplugged battery drain, physical
+shutdown or USB/power-loss recovery, mechanical button presses, balanced output,
+all plugins, Android app storage permissions, other target cross-builds or an
+exhaustive audit of unrelated upstream/kernel code.

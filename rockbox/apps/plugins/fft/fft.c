@@ -274,17 +274,7 @@ static long fft_next_frame_tick = 0; /* next tick to attempt drawing */
 
 #ifdef HAVE_LCD_COLOR
 #define SHADES BMPWIDTH_fft_colors
-#if LCD_DEPTH >= 24
-/* fft_colors is always a 16bpp palette bitmap, but the spectrogram colours get
- * handed to FB_UNPACK_SCALAR_LCD() which expects a native fb_data when the
- * display is >= 24bpp. Widen the entry to the display format first. */
-#define SPECTROGRAPH_PALETTE(index) \
-    FB_RGBPACK_LCD(RGB_UNPACK_RED(fft_colors[index]), \
-                   RGB_UNPACK_GREEN(fft_colors[index]), \
-                   RGB_UNPACK_BLUE(fft_colors[index]))
-#else
 #define SPECTROGRAPH_PALETTE(index) (fft_colors[index])
-#endif
 #else
 #define SHADES 256
 #define SPECTROGRAPH_PALETTE(index) (255 - (index))

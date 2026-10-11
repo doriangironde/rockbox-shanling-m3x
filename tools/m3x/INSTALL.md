@@ -12,6 +12,15 @@ Magisk root access when prompted, and choose **Return to Android** to exit.
 The package has no playback timer. Keep the matching source archive alongside
 the installer when distributing it. This is an independent development release.
 
+Only run a bundle from a trusted source. Checksums detect corruption; they do
+not authenticate a replaced installer and manifest. The native player runs as
+root and loads modules from shared `.rockbox` storage: do not grant untrusted
+Android apps storage-write access on this development setup.
+
+The production helper now lives at `/data/adb/modules/rockbox_m3x/fbpan`; launch
+logs live under `/data/adb/rockbox-m3x-manual/`. Updates migrate the old temporary
+helper. Restoring an old snapshot also restores that snapshot's old layout.
+
 ## Install or update from a computer
 
 Install Python 3.9+ and Android platform-tools (ADB), extract the installer ZIP,

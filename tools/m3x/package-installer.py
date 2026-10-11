@@ -57,14 +57,13 @@ def source_files():
         for path in (ROOT / directory).rglob('*'):
             if path.is_file() and path.suffix in ('.py', '.sh', '.c', '.h', '.md', '.xml', '.java', '.prop'):
                 add(path.relative_to(ROOT).as_posix(), path)
-    public = ROOT if (ROOT / 'README.md').is_file() else ROOT / 'publish/rockobx-shanling-m3x'
-    for name in ('README.md', 'LICENSE', 'UPSTREAM.md'):
-        add(name, public / name)
+    for name in ('README.md', 'LICENSE', 'UPSTREAM.md', '.gitignore'):
+        add(name, ROOT / name)
     add('M3X_OFFLINE_CHECKLIST.md', ROOT / 'M3X_OFFLINE_CHECKLIST.md')
     for directory in ('docs', 'media'):
-        for path in (public / directory).rglob('*'):
+        for path in (ROOT / directory).rglob('*'):
             if path.is_file():
-                add(path.relative_to(public).as_posix(), path)
+                add(path.relative_to(ROOT).as_posix(), path)
     recorded_modes = ROOT / 'SOURCE-MODES.json'
     if recorded_modes.is_file():
         # Some ZIP extractors discard mode bits; retain archive reproducibility.
@@ -80,7 +79,9 @@ def asset_files(path):
             if info.is_dir():
                 continue
             name = PurePosixPath(info.filename)
-            if name.is_absolute() or '..' in name.parts or name.parts[0] != '.rockbox':
+            if (name.is_absolute() or '..' in name.parts or not name.parts
+                    or name.parts[0] != '.rockbox' or info.filename != name.as_posix()
+                    or '\\' in info.filename):
                 raise ValueError('Unexpected asset path: ' + info.filename)
             if info.filename in files or (info.external_attr >> 16) & 0o170000 == 0o120000:
                 raise ValueError('Duplicate or symlink asset: ' + info.filename)
@@ -142,7 +143,11 @@ def main():
                                 for name, data in sorted(files.items())).encode()
     installer = out / ('Rockbox-M3X-' + release + '-installer.zip')
     write_zip(installer, files)
-    print(json.dumps({'installer': str(installer), 'installer_sha256': digest(installer.read_bytes()),
+    installer_hash = digest(installer.read_bytes())
+    (out / 'SHA256SUMS').write_text(installer_hash + '  ' + installer.name + '\n' +
+                                   manifest['source_archive_sha256'] + '  ' + source_zip.name + '\n')
+    (out / 'README.md').write_bytes(files['README.md'])
+    print(json.dumps({'installer': str(installer), 'installer_sha256': installer_hash,
                       'source': str(source_zip), 'source_sha256': manifest['source_archive_sha256'],
                       'release': release}, indent=2))
 

@@ -55,8 +55,19 @@ int main(int argc, char **argv)
 
     fp = fopen(out, "wb");
     if (!fp) { perror("fopen"); free(buf); return 1; }
-    if (fwrite(buf, 1, need, fp) != need) { perror("fwrite"); }
-    fclose(fp);
+    if (fwrite(buf, 1, need, fp) != need) {
+        perror("fwrite");
+        fclose(fp);
+        free(buf);
+        close(fd);
+        return 1;
+    }
+    if (fclose(fp) != 0) {
+        perror("fclose");
+        free(buf);
+        close(fd);
+        return 1;
+    }
     fprintf(stderr, "wrote %zu bytes to %s\n", need, out);
 
     free(buf);

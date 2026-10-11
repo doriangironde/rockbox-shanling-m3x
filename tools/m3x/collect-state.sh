@@ -31,7 +31,9 @@ mkdir -p "$OUT" || exit 1
         done
     done
 } > "$OUT/state.txt" 2>&1
-tail -n 250 /data/local/tmp/rockbox-m3x.log > "$OUT/launcher.txt" 2>&1
+tail -n 250 /data/adb/rockbox-m3x-manual/launch.log \
+    /data/adb/rockbox-m3x-manual/session/rockbox.log \
+    /data/adb/modules/rockbox_m3x/rockbox.log > "$OUT/launcher.txt" 2>&1
 logcat -b crash -d -t 200 > "$OUT/crash-log.txt" 2>&1
 for tomb in /data/tombstones/tombstone*; do
     [ -f "$tomb" ] || continue

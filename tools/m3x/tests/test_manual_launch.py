@@ -24,15 +24,13 @@ class ManualLaunchTests(unittest.TestCase):
         self.executable(self.bin / 'sleep', '/bin/sleep 0.1')
         self.executable(self.bin / 'setsid', 'exec "$@"')
         self.executable(self.mod / 'rockbox', 'exit 0')
-        self.executable(self.base / 'fbpan', 'exit 0')
+        self.executable(self.mod / 'fbpan', 'exit 0')
         self.executable(self.mod / 'service.sh',
             f'test -e "{self.mod}/disable" || exit 9\n'
             f'test ! -e "${{0%/*}}/disable" || exit 8\n'
             f'echo launched >> "{self.calls}"\ntouch "${{0%/*}}/disable"')
         source = (ROOT / 'm3x-module/launch.sh').read_text()
         source = source.replace('/data/adb/rockbox-m3x-manual', str(self.state))
-        source = source.replace('/data/local/tmp/rockbox-m3x-manual.log', str(self.base / 'log'))
-        source = source.replace('/data/local/tmp/fbpan', str(self.base / 'fbpan'))
         source = source.replace('/system/bin/sh', '/bin/sh')
         self.executable(self.mod / 'launch.sh', source)
         self.env = dict(os.environ, PATH=f'{self.bin}:{os.environ["PATH"]}')
@@ -65,6 +63,16 @@ class ManualLaunchTests(unittest.TestCase):
         self.assertIn('already starting', second.stderr)
         self.wait_done()
         self.assertEqual(self.calls.read_text(), 'launched\n')
+
+    def test_failed_boot_disable_releases_launch_lock(self):
+        self.executable(self.bin / 'touch', 'exit 1')
+        result = self.launch()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.state / 'launch.lock').exists())
+        self.assertFalse(self.calls.exists())
+        (self.bin / 'touch').unlink()
+        self.assertEqual(self.launch().returncode, 0)
+        self.wait_done()
 
     def test_stale_lock_is_recovered(self):
         lock = self.state / 'launch.lock'

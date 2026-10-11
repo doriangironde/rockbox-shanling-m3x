@@ -11,7 +11,7 @@
 .cache
 
 __pycache__
-.DS_STORE
+.DS_Store
 
 # Intermediate language files
 /apps/lang/*.update

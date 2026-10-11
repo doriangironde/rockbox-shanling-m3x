@@ -1,6 +1,22 @@
-# M3X offline development pass — 2026-10-07
+# M3X validation record
 
-Everything in this pass was performed locally. No M3X connection, installation,
+This is a dated history, not a claim that every build has passed device tests.
+Later sections supersede earlier pending items. Private evidence now lives in
+`local/validation/`; old directory names in archived notes are historical.
+
+## Remaining hardware checks
+
+- Balanced output, both DACs, absolute volume/balance calibration and filters.
+- Physical shutdown, whole-system suspend and unplugged battery consumption.
+- Plugins, shuffle/repeat, and USB switching during plugin-generated audio.
+- Physical microSD removal during playback and microSD reboot persistence.
+- Analog dropouts; software progress and underrun counters do not measure them.
+- Re-test changed native builds on the device. Host replays and the desktop
+  simulator do not establish Android linker or physical DAC behavior.
+
+## Initial offline development pass — 2026-10-07
+
+This initial pass was performed locally: no M3X connection, installation,
 boot-image flash or audible playback occurred.
 
 | Work possible offline | Result |
@@ -42,7 +58,7 @@ stress replay reproduced control starvation; an explicit worker/control
 handoff fixed it. The user confirmed prompt volume response with clean audio.
 The host suite now has 24 passing tests, including prepare/write failure
 recovery and bounded control latency. The 56 packaged modules match the build.
-Local device evidence is under `validation/device-20261009/` and is not public.
+Local device evidence is under `local/validation/device-20261009/` and is not public.
 
 The menu test held CPU sensor0 at 32–33 C. The first successful 16-bit playback
 run held it at 37–39 C, with battery 27.0–28.7 C. These are short USB-connected
@@ -108,11 +124,11 @@ Android recovery was verified afterward; boot autostart remains disabled.
 - Review/update bundle: `build-m3x/m3x-offline-bundle.zip` (executable, assets,
   launcher scripts, framebuffer helper, diagnostics and checksums)
 - Simulator: `build-m3x-sim/rockboxui`
-- Evidence: `validation/offline-20261007-batch/`
+- Evidence: `local/validation/offline-20261007-batch/`
 - Native verification: `sh tools/m3x/verify-offline.sh`
 - Silent simulator verification: `python3 tools/m3x/run-simulator-test.py`
 
-## Device checks still required
+## Checks outstanding at the initial pass (superseded by later results)
 
 1. Longer playback, plugin loading and repeated starts still need testing.
    The previous immediate status-139 crash did not recur in the bounded menu
@@ -158,9 +174,9 @@ disabled, original album playlist restored and volume -60 dB preserved.
 
 Repeatable tools: tools/m3x/build-playback-observer.py, observe-playback.c,
 playback-soak.sh, summarize-playback-soak.py and make-format-fixtures.py.
-Private report: validation/soak-20261009/REPORT.md. Full raw album/format traces
-are in validation/soak-20261009/device-full/ and
-validation/format-20261009/device-final/. Remaining normal launch/exit, battery,
+Private report: local/validation/soak-20261009/REPORT.md. Full raw album/format traces
+are in local/validation/soak-20261009/device-full/ and
+local/validation/format-20261009/device-final/. Remaining normal launch/exit, battery,
 shuffle/repeat, plugins, calibration, power, suspend, card and installer checks
 are not implied by these passes.
 
@@ -186,8 +202,8 @@ unverified and is distinct from the new return action.
 Build/user instructions: android-launcher/README.md. APK:
 build-m3x-launcher/Rockbox-M3X.apk. Keep the private local signing key for updates.
 Device rollback files: /data/local/tmp/m3x-before-manual-launch-20261009/.
-Local rollback files: backups/manual-launch-20261009/.
-Private verification evidence: validation/manual-launch-20261009/.
+Local rollback files: local/backups/manual-launch-20261009/.
+Private verification evidence: local/validation/manual-launch-20261009/.
 
 A subsequent normal reboot verified Android as the default, with Rockbox stopped,
 PCM closed, boot autostart disabled and the app still installed.
@@ -202,8 +218,8 @@ The card passed write/read hash checks, MP3/FLAC playback at 44.1/48 kHz with
 zero observed underruns, and Android unmount/remount with unchanged file hashes.
 The raw mount remained readable while Android app runtimes were stopped.
 Physical removal during playback and reboot persistence are still untested.
-Return to Android and eject before removing the card. Installer integration
-remains pending. Private evidence: validation/microsd-20261010/REPORT.md.
+Return to Android and eject before removing the card. The later installer adds
+the microSD link. Private evidence: local/validation/microsd-20261010/REPORT.md.
 
 ## Standalone installation/update/rollback — 2026-10-10
 
@@ -218,4 +234,83 @@ rollback passed with unchanged binary/settings/resume/card-file hashes.
 Packaging emits deterministic installer and corresponding-source ZIPs, with
 fixed ZIP metadata and source/binary checksums. This is a development installer
 for the tested prerequisite setup, not a firmware image or Magisk-flashable ZIP.
-See tools/m3x/INSTALL.md. Private evidence: validation/installer-20261010/.
+See tools/m3x/INSTALL.md. Private evidence: local/validation/installer-20261010/.
+
+## Maintenance and Ponytail review — 2026-10-10
+
+The complete host gate passed 60 tests, including the two private boot-image
+preservation checks, and matched all 56 codec/plugin modules. Native ARM64
+Rockbox, the simulator and changed device probes built. Actual simulator runs
+decoded the licensed MP3, created playlist state and exercised theme scrolling,
+pause/resume and Home; screenshots were inspected. All audio was captured to
+files, not played through speakers. Before/after replays also demonstrated
+graphics, input-race, audio-recovery and diagnostic fixes.
+
+Private recovery/evidence/research files moved under `local/`; public root
+documentation is now canonical. Current simulator outputs use
+`local/validation/simulator-smoke/` and `local/validation/theme-preview/`, not
+hardcoded historical pass directories. Builds and the retained signing key stay
+in their original work directories.
+
+Production `fbpan` and launch logs now use root-owned module/session paths.
+Installer validation rejects unchecked files, path aliases and symlinks, and
+rollback reports launcher-removal failures. The full scope and remaining
+shared-storage/plugin-audio limitations are in [the review](docs/PONYTAIL_REVIEW.md).
+This maintenance pass made no player connection, installation or firmware flash;
+previous device results do not validate these newly changed native builds.
+
+## Maintenance build on hardware — 2026-10-11
+
+Checked on the connected rooted Shanling M3X: firmware 1.75, API 25, existing
+I2C5 audio fix. The installed/tested bundle was `dev-a0ee34178f21`; later host
+report/documentation changes did not alter these native binaries:
+
+```text
+rockbox  463a12b30fed6947cba68f718acce0a88fc6e91c0581b0d64b3158d0aa5642e1
+fbpan    49723154df96830f93834a3737a1e189918c4adf5fbdb0424afe3873aa5990cc
+```
+
+- **Installer/recovery:** Preflight and update passed. An actual rollback
+  restored the prior native/helper/config/playlist hashes. Reinstallation left
+  the maintained binary and root-owned mode-755 module helper installed, with
+  the original config and playlist hashes, existing microSD link, boot
+  autostart disabled and Android active. No firmware or boot image was flashed.
+- **Device replays:** ARM64 input/battery validation passed, including a live
+  battery read. The filesystem probe exclusively created, wrote/fsynced,
+  rotated, reopened and removed its temporary playlist-control file and read
+  actual codecs/plugins/config/music. These are not mechanical-button tests.
+- **UI and manual session:** Native menu/files/playback framebuffers were
+  inspected. Launching the installed Android app started the maintained player;
+  tapping its native Return to Android menu exited 0, released the launch lock,
+  closed PCM and restored all four Android/thermal services and the home screen.
+  A duplicate service launch was refused without disturbing the active player.
+- **Mixed formats/rates:** All eight synthetic tracks were observed in order
+  near their start and end over 95.15 seconds. MP3 at 32 kHz used 48 kHz output;
+  the other source/output pairs matched at 44.1, 48, 88.2, 96, 176.4 and 192 kHz.
+  Output was stereo `S16_LE`; the maximum observed underrun counter was zero.
+  **The strict report is INCOMPLETE_OR_FAILED, not an uninterrupted-album pass.**
+  Samples 76 and 92 caught PCM closed/open during rate changes. The test only
+  requested lock at sample 83, after the first two tracks; the native lock did
+  not spontaneously release. No gapless-rate-transition claim is made.
+- **Continuous playback:** A separate full 136.62-second licensed MP3 without
+  an ID3 track number passed the unchanged continuous-playback/lock criteria:
+  134.05 seconds observed, 126.21 seconds locked and dark, zero reported
+  underruns, no observed elapsed jumps or repeated hardware pointers, and
+  automatic Android restoration after natural playlist completion.
+- **Report fix and regression:** Physical metadata used `track=-1`; the host
+  summarizer previously discarded it. Signed parsing and nonempty-path playback
+  detection now handle untagged files without counting cleared end-of-stream
+  metadata. The regression failed before the fix; the complete suite then
+  passed **61 tests**. No timing, lock or underrun threshold was relaxed.
+
+Unique test music, upload and controller directories were removed from the
+player. Private evidence and the previous-installation backup remain under
+`local/validation/maintenance-20261011-111937/`; device rollback snapshots remain
+under `/data/adb/rockbox-m3x-backups/`. Raw device logs, screenshots, serials and
+user music are not published.
+
+Limits: ADB/USB stayed connected and the battery was charging. Touch/Power
+events were injected, not human-operated. No analog listening/dropout,
+unplugged-battery, balanced-output, physical shutdown, USB-headphone switching,
+power-loss, microSD-removal/reboot-persistence or exhaustive plugin test was
+performed in this follow-up.

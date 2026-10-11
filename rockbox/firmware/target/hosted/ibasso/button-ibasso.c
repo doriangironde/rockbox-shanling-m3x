@@ -312,6 +312,7 @@ static int _last_btns = BUTTON_NONE;
 int button_read_device(int *data)
 {
 #ifdef SHANLING_M3X
+    m3x_button_tick();
     bool frame_done[_nfds ? _nfds : 1];
     memset(frame_done, 0, sizeof(frame_done));
 #endif
@@ -419,8 +420,8 @@ int button_read_device(int *data)
     int touch = touchscreen_to_pixels(_last_x, _last_y, data);
 
 #ifdef SHANLING_M3X
-    return m3x_button_read_filter(_last_btns |
-        (_last_touch_state == TOUCHSCREEN_STATE_DOWN ? touch : BUTTON_NONE));
+    return _last_btns |
+        (_last_touch_state == TOUCHSCREEN_STATE_DOWN ? touch : BUTTON_NONE);
 #else
     if(_last_touch_state == TOUCHSCREEN_STATE_DOWN)
     {

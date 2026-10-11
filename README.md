@@ -34,6 +34,13 @@ progress and underrun counters do not measure analog dropouts. The earlier
 status-139 crash did not recur in later recorded runs; its original cause is
 still unconfirmed. See the validation record for dates and evidence limits.
 
+The maintenance build was checked on the M3X on **2026-10-11**: update/rollback,
+Android launch/return, continuous MP3 playback and dark-screen lock passed.
+The eight-track format sweep completed, but did not pass the strict
+uninterrupted-playback/whole-album-lock criteria. The
+[validation record](M3X_OFFLINE_CHECKLIST.md#maintenance-build-on-hardware--2026-10-11)
+identifies the tested binary and the remaining limits.
+
 ## Install and use
 
 Build an installer as described below, or use a matching installer and source

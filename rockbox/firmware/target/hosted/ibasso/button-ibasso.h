@@ -67,18 +67,10 @@
 
 int handle_button_event(__u16 code, __s32 value, int last_btns);
 
-/*
- * Optional target hook for events from the touchscreen, including EV_SYN.
- *
- * Returns true if the target consumed the raw event itself (e.g. because the
- * panel reports slot-based multitouch and has to be translated into the legacy
- * single-touch stream this file decodes). When false, the default legacy
- * decoding below is used.
- *
- * Only the M3X defines this. Declared weak so other ibasso targets are
- * unaffected.
- */
-bool handle_touchscreen_target_event(__u16 type, __u16 code, __s32 value) __attribute__((weak));
+#ifdef SHANLING_M3X
+/* Consume raw Goodix events before the shared legacy decoder. */
+bool handle_touchscreen_target_event(__u16 type, __u16 code, __s32 value);
+#endif
 
 /* Legacy single-touch decoder, exposed so the target hook can re-inject into it. */
 bool handle_touchscreen_event(__u16 code, __s32 value);

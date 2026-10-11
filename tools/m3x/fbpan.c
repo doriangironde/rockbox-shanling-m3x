@@ -71,9 +71,9 @@ static int fill_pages(unsigned rgb)
     }
 
     /* The M3X fb is RGBA8888 (red.offset 0, green 8, blue 16, alpha 24). */
-    px[0] = rgb & 0xff;
+    px[0] = (rgb >> 16) & 0xff;
     px[1] = (rgb >> 8) & 0xff;
-    px[2] = (rgb >> 16) & 0xff;
+    px[2] = rgb & 0xff;
     px[3] = 0xff;
 
     pages = var.yres_virtual / var.yres;
@@ -94,7 +94,7 @@ static int fill_pages(unsigned rgb)
                      + (size_t)y * fix.line_length, row, row_bytes);
         free(row);
         printf("  filled page %u (yoffset %u) %02x%02x%02x\n",
-               pg, pg * var.yres, px[2], px[1], px[0]);
+               pg, pg * var.yres, px[0], px[1], px[2]);
     }
 
     msync(p, len, MS_SYNC);
@@ -122,9 +122,9 @@ static int fill_one_page(unsigned rgb, unsigned page)
         return 1;
     }
 
-    px[0] = rgb & 0xff;
+    px[0] = (rgb >> 16) & 0xff;
     px[1] = (rgb >> 8) & 0xff;
-    px[2] = (rgb >> 16) & 0xff;
+    px[2] = rgb & 0xff;
     px[3] = 0xff;
 
     row = malloc(row_bytes);
@@ -141,7 +141,7 @@ static int fill_one_page(unsigned rgb, unsigned page)
     free(row);
 
     printf("  filled page %u (yoffset %u) %02x%02x%02x\n",
-           page, page * var.yres, px[2], px[1], px[0]);
+           page, page * var.yres, px[0], px[1], px[2]);
     return 0;
 }
 
@@ -161,6 +161,9 @@ static int do_blank(int mode)
 static int do_pan(unsigned yoff)
 {
     struct fb_var_screeninfo v = var;
+    v.yoffset = yoff;
+    v.xoffset = 0;
+    v.activate = FB_ACTIVATE_NOW;
 
     printf("FBIOPAN_DISPLAY(yoffset=%u) ...\n", yoff);
     fflush(stdout);
@@ -217,7 +220,7 @@ int main(int argc, char **argv)
     if (!strcmp(argv[1], "--panfill")) {
         if (argc > 2) fill = (unsigned)strtoul(argv[2], NULL, 16);
         yoff = (argc > 3) ? (unsigned)strtoul(argv[3], NULL, 0) : 0;
-        if (fill_pages(fill) < 0)
+        if (fill_pages(fill) != 0)
             return 1;
         return do_pan(yoff);
     }
@@ -229,7 +232,7 @@ int main(int argc, char **argv)
         unsigned page = (unsigned)strtoul(argv[3], NULL, 0);
         unsigned yo = (argc > 4) ? (unsigned)strtoul(argv[4], NULL, 0)
                                  : page * var.yres;
-        if (fill_one_page(rgb, page) < 0)
+        if (fill_one_page(rgb, page) != 0)
             return 1;
         return do_pan(yo);
     }

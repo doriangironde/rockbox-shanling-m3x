@@ -11,8 +11,9 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILD = ROOT / "build-m3x-sim"
-EVIDENCE = ROOT / "validation/offline-20261007-batch/simulator"
+EVIDENCE = ROOT / "local/validation/simulator-smoke"
 EVIDENCE.mkdir(parents=True, exist_ok=True)
+(EVIDENCE / "summary.json").unlink(missing_ok=True)
 with tempfile.TemporaryDirectory(prefix="m3x-simulator-") as directory:
     base = Path(directory)
     disk = base / "simdisk"

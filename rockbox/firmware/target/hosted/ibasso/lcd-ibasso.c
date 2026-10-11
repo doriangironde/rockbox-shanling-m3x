@@ -95,30 +95,11 @@ void lcd_init_device(void)
     }
 #endif
 
-    /*
-        Framebuffer does not fit the screen, a bug of iBassos Firmware, not Rockbox.
-        Cannot be solved with parameters.
-    */
-    /*vinfo.bits_per_pixel = LCD_DEPTH;
-    vinfo.xres           = LCD_WIDTH;
-    vinfo.xres_virtual   = LCD_WIDTH;
-    vinfo.width          = LCD_WIDTH;
-    vinfo.yres           = LCD_HEIGHT;
-    vinfo.yres_virtual   = LCD_HEIGHT;
-    vinfo.height         = LCD_HEIGHT;
-    vinfo.activate       = FB_ACTIVATE_NOW;
-    if(ioctl(dev_fd, FBIOPUT_VSCREENINFO, &vinfo) == -1)
-    {
-        DEBUGF("ERROR %s: ioctl FBIOPUT_VSCREENINFO failed on /dev/graphics/fb0, errno: %d.", __func__, errno);
-        exit(EXIT_FAILURE);
-    }*/
-
-
     /* Sanity check: Does framebuffer config match Rockbox config? */
     size_t screensize = vinfo.xres * vinfo.yres * vinfo.bits_per_pixel / 8;
     if(screensize != FRAMEBUFFER_SIZE)
     {
-        DEBUGF("ERROR %s: Screen size does not match config: %d != %d.", __func__, screensize, FRAMEBUFFER_SIZE);
+        DEBUGF("ERROR %s: Screen size does not match config: %zu != %zu.", __func__, screensize, (size_t)FRAMEBUFFER_SIZE);
         exit(EXIT_FAILURE);
     }
 

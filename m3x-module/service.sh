@@ -1,8 +1,8 @@
 #!/system/bin/sh
 # Runs from Magisk late_start. Keep Android thermal services running.
 MODDIR=${0%/*}
-LOG=/data/local/tmp/rockbox-m3x.log
-FB=/data/local/tmp/fbpan
+LOG=$MODDIR/rockbox.log
+FB=$MODDIR/fbpan
 
 [ -e "$MODDIR/disable" ] && exit 0
 

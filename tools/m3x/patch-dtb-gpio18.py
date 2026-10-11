@@ -49,15 +49,15 @@ Drop gpio18 and gpio19 from `tlmm_gpio_key/gpio_key_active` and
 `gpio_key_suspend` (both the `mux` and `config` pin lists). The two keys keep
 working on gpio13/gpio17, and I2C5 gets its pins.
 
-This script rewrites the stock boot image in place. It does not need kernel
-sources: the M3X boot image's kernel blob is `gzip(ARM64 Image)` followed by a
+This script writes a new boot image and refuses to overwrite an existing file.
+It does not need kernel sources: the boot image's kernel is gzip(ARM64 Image) followed by a
 bank of 68 concatenated DTBs, one per board variant, and the M3X's is the one
 with model "Qualcomm Technologies, Inc. MSM8937-PMI8950 MTP". Only that DTB's
 bytes change; its size is preserved by padding so every later DTB keeps its
 offset.
 
 Usage:
-    python3 tools/m3x/patch-dtb-gpio18.py firmware/m3x_v1_75/boot.img out/boot.img
+    python3 tools/m3x/patch-dtb-gpio18.py local/firmware/m3x_v1_75/boot.img out/boot.img
 
 The result is a *stock* boot image (no Magisk). Patch it with Magisk afterwards
 before flashing.
@@ -65,6 +65,7 @@ before flashing.
 
 import hashlib
 import os
+from pathlib import Path
 import struct
 import subprocess
 import sys
@@ -165,7 +166,7 @@ def fdt_model(dtb):
 
 def patch_dts(dts_path):
     """Remove the conflicting pins from tlmm_gpio_key."""
-    text = open(dts_path, encoding="utf-8", errors="replace").read()
+    text = Path(dts_path).read_text(encoding="utf-8", errors="replace")
 
     start = text.find("tlmm_gpio_key {")
     if start < 0:
@@ -219,17 +220,19 @@ def main():
         sys.exit(__doc__)
 
     src, dst = sys.argv[1], sys.argv[2]
+    if os.path.lexists(dst):
+        die("destination already exists; choose a new output file")
     # Optional third argument: a Magisk-patched boot image to patch instead of
     # the stock one. Magisk only rewrites the ramdisk - it leaves the kernel
     # region byte-identical - so the DTB patch can be applied to either and the
     # result keeps root.
     base = sys.argv[3] if len(sys.argv) == 4 else None
     if base:
-        img = open(base, "rb").read()
+        img = Path(base).read_bytes()
         print("base boot image: %s (%d bytes)  [Magisk-patched]" % (base, len(img)))
         # The DTB lives inside the kernel, so what has to match is the kernel
         # region - not the total image size (Magisk grows the ramdisk).
-        stock = open(src, "rb").read()
+        stock = Path(src).read_bytes()
         spage = struct.unpack("<I", stock[0x24:0x28])[0]
         sks = struct.unpack("<I", stock[0x08:0x0C])[0]
         bpage = struct.unpack("<I", img[0x24:0x28])[0]
@@ -241,7 +244,7 @@ def main():
             die("the base image's kernel is not the stock kernel; refusing to "
                 "splice a DTB patch built from a different source")
     else:
-        img = open(src, "rb").read()
+        img = Path(src).read_bytes()
         print("source boot image: %s (%d bytes)" % (src, len(img)))
     print("  sha256 %s" % sha256(img))
 
@@ -278,17 +281,17 @@ def main():
         orig = os.path.join(td, "orig.dtb")
         dts = os.path.join(td, "m3x.dts")
         newdtb = os.path.join(td, "new.dtb")
-        open(orig, "wb").write(tail[off:off + size])
+        Path(orig).write_bytes(tail[off:off + size])
 
         subprocess.run(["dtc", "-I", "dtb", "-O", "dts", "-o", dts, orig],
                        stderr=subprocess.DEVNULL, check=True)
         print("patching:")
         patched = patch_dts(dts)
-        open(dts, "w", encoding="utf-8").write(patched)
+        Path(dts).write_text(patched, encoding="utf-8")
 
         subprocess.run(["dtc", "-I", "dts", "-O", "dtb", "-o", newdtb, dts],
                        stderr=subprocess.DEVNULL, check=True)
-        new = open(newdtb, "rb").read()
+        new = Path(newdtb).read_bytes()
 
     print("  recompiled DTB: %d bytes (was %d)" % (len(new), size))
     if len(new) > size:
@@ -314,7 +317,8 @@ def main():
 
     os.makedirs(os.path.dirname(os.path.abspath(dst)), exist_ok=True)
     out = bytes(out)
-    open(dst, "wb").write(out)
+    with open(dst, "xb") as output:
+        output.write(out)
     print("wrote %s (%d bytes)" % (dst, len(out)))
     print("  sha256 %s" % sha256(out))
     print("  %d of %d bytes differ from the source"

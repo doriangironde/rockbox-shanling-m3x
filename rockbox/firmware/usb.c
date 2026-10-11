@@ -497,7 +497,7 @@ static void NORETURN_ATTR usb_thread(void)
 
         case SYS_USB_CONNECTED_ACK:
             if((uint32_t)ev.data != usb_broadcast_seqnum) {
-                DEBUGF("usb: late ack %lX < %lX", ev.data, usb_broadcast_seqnum);
+                DEBUGF("usb: late ack %lX < %lX", (unsigned long)ev.data, (unsigned long)usb_broadcast_seqnum);
                 break;
             }
             if(usb_num_acks_to_expect == 0) {

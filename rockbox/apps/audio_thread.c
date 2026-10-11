@@ -139,6 +139,15 @@ intptr_t audio_queue_send(long id, intptr_t data)
     return queue_send(&audio_queue, id, data);
 }
 
+void audio_queue_clear(void)
+{
+    queue_clear(&audio_queue);
+#if defined(SHANLING_M3X) && !defined(SIMULATOR)
+    /* Clearing track messages must not lose a pending output transition. */
+    pcm_m3x_set_output_callback(m3x_output_changed);
+#endif
+}
+
 /* Return the playback and recording status */
 int audio_status(void)
 {

@@ -13,7 +13,7 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
 BUILD = ROOT / "build-m3x-sim"
-OUT = ROOT / "validation/ipod-theme"
+OUT = ROOT / "local/validation/theme-preview"
 OUT.mkdir(parents=True, exist_ok=True)
 (OUT / "summary.json").unlink(missing_ok=True)
 with tempfile.TemporaryDirectory(prefix="m3x-ipod-") as directory:

@@ -41,7 +41,7 @@
 #ifdef SHANLING_M3X
 #include <stdbool.h>
 bool m3x_screen_locked(void);
-int m3x_button_read_filter(int buttons);
+void m3x_button_tick(void);
 #endif
 
 

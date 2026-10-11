@@ -54,11 +54,9 @@ class ServiceTests(unittest.TestCase):
             # Leave ample time for the monitor under parallel compiler load.
             lifetime = 3 if later else 0.25
             executable(mod / "rockbox", f'echo launch >> "{log}"\n/bin/sleep {lifetime}\nexit {child_exit}\n')
-            executable(base / "fbpan", f'echo fbpan "$@" >> "{log}"\n')
+            executable(mod / "fbpan", f'echo fbpan "$@" >> "{log}"\n')
             source = (ROOT / "m3x-module/service.sh").read_text()
             source = source.replace("/sys/", f"{sysfs}/")
-            source = source.replace("/data/local/tmp/rockbox-m3x.log", str(base / "service.log"))
-            source = source.replace("/data/local/tmp/fbpan", str(base / "fbpan"))
             (mod / "service.sh").write_text(source)
             if disabled:
                 (mod / "disable").touch()
@@ -66,7 +64,7 @@ class ServiceTests(unittest.TestCase):
             if later:
                 def update():
                     deadline = time.monotonic() + 8
-                    ready_log = base / "service.log" if later == "cool" else log
+                    ready_log = mod / "rockbox.log" if later == "cool" else log
                     ready_text = "waiting for device to cool" if later == "cool" else "launch"
                     while not ready_log.exists() or ready_text not in ready_log.read_text():
                         if time.monotonic() >= deadline:
@@ -91,7 +89,7 @@ class ServiceTests(unittest.TestCase):
             if timer:
                 timer.join()
             return (log.read_text() if log.exists() else "",
-                    (base / "service.log").read_text() if (base / "service.log").exists() else "",
+                    (mod / "rockbox.log").read_text() if (mod / "rockbox.log").exists() else "",
                     (mod / "disable").exists(),
                     (light / "brightness").read_text().strip(),
                     (sysfs / "power/wake_unlock").read_text().strip())

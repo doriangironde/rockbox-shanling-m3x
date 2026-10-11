@@ -35,7 +35,8 @@ The APK only starts the separately installed native player. It includes no
 firmware, native player, codecs, root exploit or network permission. Install the
 matching native build, `m3x-module/service.sh` and `m3x-module/launch.sh` in the
 existing rooted M3X development installation first. The framebuffer helper at
-`/data/local/tmp/fbpan` is also required.
+`/data/adb/modules/rockbox_m3x/fbpan` is also required. It stays in the root-owned
+module directory, not Android's shell-writable temporary directory.
 
 With a JDK, Android SDK build-tools 36.0.0 and platform android-37.0 installed:
 

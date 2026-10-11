@@ -16,6 +16,8 @@ static int present = -1, busy, prepare_failures, writes, notifications, closes;
 static int force_write_error;
 static bool writing, block_write, release_write, switching;
 static int internal_inits, mutes, unrouted;
+static int internal_busy = 1;
+static bool internal_routed;
 static const int16_t samples[16] = {0};
 static FILE *test_fopen(const char *path, const char *mode)
 {
@@ -25,17 +27,18 @@ static FILE *test_fopen(const char *path, const char *mode)
     FILE *f = tmpfile(); assert(f); fputs("05ac:110b\n", f); rewind(f); return f;
 }
 void panicf(const char *fmt, ...) { fprintf(stderr, "Unexpected panic: %s\n", fmt); abort(); }
-void audiohw_m3x_init(void) { ++internal_inits; }
+void audiohw_m3x_init(void) { ++internal_inits; internal_routed = true; }
 void audiohw_m3x_unmute(void) { assert(CARD == 0); }
 void audiohw_m3x_mute(void) { ++mutes; }
-void audiohw_m3x_fallback_route(void) { ++unrouted; }
+void audiohw_m3x_fallback_route(void) { ++unrouted; internal_routed = false; }
 struct pcm *pcm_open(unsigned int card, unsigned int device, unsigned int flags, struct pcm_config *c)
 {
     assert(device == 0 && c->channels == 2 && c->format == PCM_FORMAT_S16_LE);
     assert(flags == (card ? PCM_OUT | PCM_NORESTART : PCM_OUT));
     if (card) assert(c->rate == 44100 && c->period_size == 480);
+    else assert(internal_routed); /* An internal retry must restore the DAC route. */
     struct pcm *p = malloc(sizeof(*p)); assert(p); p->card = card;
-    p->ready = !card || busy-- <= 0;
+    p->ready = card ? busy-- <= 0 : internal_busy-- <= 0;
     return p;
 }
 int pcm_is_ready(struct pcm *p) { return p && p->ready; }
@@ -92,13 +95,18 @@ static void *switch_in_thread(void *unused)
 int main(void)
 {
     sink_dma_init(); sink_dma_postinit(); pcm_m3x_set_output_callback(notify);
-    assert(CARD == 0 && internal_inits == 1);
+    assert(CARD == 0 && internal_inits == 2 && internal_routed);
     sink_set_freq(1); assert(_config.rate == 48000);
     sink_dma_start(samples, sizeof(samples));
     int previous = notification_count();
     __atomic_store_n(&present, 7, __ATOMIC_RELAXED);
-    wait_for_change(previous); select_output(7);
-    assert(mutes == 1 && unrouted == 1);
+    wait_for_change(previous);
+    /* Queue clearing re-registers the callback to replay a lost notification. */
+    int posted = notification_count();
+    pcm_m3x_set_output_callback(notify);
+    assert(notification_count() == posted + 1 && _output_change_pending);
+    select_output(7);
+    assert(mutes == 1 && unrouted == 2);
     sink_dma_start(samples, sizeof(samples));
     /* A transient USB error with the identity still present reopens USB. */
     previous = notification_count();
@@ -109,7 +117,7 @@ int main(void)
     previous = notification_count();
     __atomic_store_n(&present, -1, __ATOMIC_RELAXED);
     wait_for_change(previous); select_output(0);
-    assert(internal_inits == 2 && builtin_pcm_sink.caps.samprs == hw_freq_sampr);
+    assert(internal_inits == 3 && internal_routed && builtin_pcm_sink.caps.samprs == hw_freq_sampr);
     sink_set_freq(1); assert(_config.rate == 48000);
     /* Route close cannot pass an in-flight write. */
     pthread_mutex_lock(&gate); block_write = true; release_write = false; pthread_mutex_unlock(&gate);

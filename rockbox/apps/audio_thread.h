@@ -107,5 +107,6 @@ void audio_recording_handler(struct queue_event *ev);
 /** --- audio_queue helpers --- **/
 void audio_queue_post(long id, intptr_t data);
 intptr_t audio_queue_send(long id, intptr_t data);
+void audio_queue_clear(void);
 
 #endif /* AUDIO_THREAD_H */

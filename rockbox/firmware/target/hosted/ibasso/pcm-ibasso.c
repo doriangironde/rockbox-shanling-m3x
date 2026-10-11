@@ -361,6 +361,8 @@ static bool m3x_try_open_output(void)
 {
     for (int retry = 0; retry <= (_usb_earpods ? 10 : 1); ++retry)
     {
+        if (retry > 0 && !_usb_earpods)
+            audiohw_m3x_init();
         _alsa_handle = pcm_open(CARD, DEVICE, _pcm_flags, &_config);
         if (pcm_is_ready(_alsa_handle) && pcm_prepare(_alsa_handle) == 0)
             return true;

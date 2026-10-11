@@ -31,6 +31,7 @@ static int primary_slot = -1;
 static bool suppress_contacts;
 static bool dropped;
 static bool touch_enabled = true;
+static bool touch_reset_pending;
 static bool screen_locked;
 static bool power_pressed, poweroff_requested;
 static unsigned long power_pressed_at;
@@ -58,11 +59,9 @@ static void release_touch(void)
 
 void touchscreen_enable_device(bool enable)
 {
-    touch_enabled = enable;
-    release_touch();
-    suppress_contacts = false;
-    for (int i = 0; i < M3X_TOUCH_SLOTS; ++i)
-        suppress_contacts |= slots[i].active;
+    /* The UI must not mutate decoder state owned by the input tick. */
+    __atomic_store_n(&touch_enabled, enable, __ATOMIC_RELAXED);
+    __atomic_store_n(&touch_reset_pending, true, __ATOMIC_RELEASE);
 }
 
 static void toggle_screen_lock(void)
@@ -82,8 +81,15 @@ static void toggle_screen_lock(void)
         backlight_on();
 }
 
-int m3x_button_read_filter(int buttons)
+void m3x_button_tick(void)
 {
+    if (__atomic_exchange_n(&touch_reset_pending, false, __ATOMIC_ACQUIRE))
+    {
+        release_touch();
+        suppress_contacts = false;
+        for (int i = 0; i < M3X_TOUCH_SLOTS; ++i)
+            suppress_contacts |= slots[i].active;
+    }
     /* Poll the hold duration even when Linux sends no autorepeat events. */
     if (power_pressed && !poweroff_requested &&
         (unsigned long)current_tick - power_pressed_at >= M3X_POWEROFF_TICKS)
@@ -91,7 +97,6 @@ int m3x_button_read_filter(int buttons)
         poweroff_requested = true;
         sys_poweroff();
     }
-    return buttons;
 }
 
 /* Publish complete frames. Never transfer a held selection to a second finger. */
@@ -109,7 +114,7 @@ static void report_touch(void)
     }
     if (!any_active)
         suppress_contacts = false;
-    if (!touch_enabled || m3x_screen_locked())
+    if (!__atomic_load_n(&touch_enabled, __ATOMIC_RELAXED) || m3x_screen_locked())
         return;
     if (primary_slot < 0 && !suppress_contacts)
     {
@@ -144,7 +149,7 @@ int handle_button_event(__u16 code, __s32 value, int last_btns)
         }
         else if (value == 0 && power_pressed)
         {
-            m3x_button_read_filter(last_btns);
+            m3x_button_tick();
             if (!poweroff_requested &&
                 (unsigned long)current_tick - power_pressed_at < M3X_POWEROFF_TICKS)
                 toggle_screen_lock();

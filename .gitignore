@@ -1,27 +1,36 @@
-# Keep local SDKs, private device data and generated outputs out of public Git.
-/.DS_Store
-**/.DS_Store
+# Public source lives at the workspace root; local artifacts are not releases.
+/local/
+/publish/
 /build*/
 /android-ndk*/
 /android-toolchain*/
 /ndk-*.zip
-/device/
-/firmware/
+/Magisk*.apk
+
+# Old workspace locations, if an earlier tool recreates them.
 /backups/
-/validation/
+/device/
 /edl/
+/firmware/
 /kern/
 /magisk-module/
-/publish/
-/Magisk*.apk
+/validation/
 /M3X_PORT_LOG.md
 /M3X_DISPLAY_HANDOFF.md
+/SOURCE-MODES.json
+/SOURCE-SHA256.json
+
+.DS_Store
 __pycache__/
-*.pyc
+*.py[cod]
+*.jks
+*.keystore
 .env
 .env.*
 *.pem
 *.key
+
+# Probe executables belong in work directories, not beside their C sources.
 /tools/m3x/fbpan
 /tools/m3x/fbinfo
 /tools/m3x/fbdump

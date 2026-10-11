@@ -10,6 +10,8 @@ import subprocess
 
 
 def verify_bundle(root):
+    if any(path.is_symlink() for path in root.rglob('*')):
+        raise ValueError('Bundle must not contain symlinks')
     expected = {}
     for line in (root / 'SHA256SUMS').read_text().splitlines():
         digest, name = line.split('  ', 1)

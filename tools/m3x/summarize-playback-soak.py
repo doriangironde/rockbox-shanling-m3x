@@ -26,7 +26,7 @@ for block in (directory / "samples.txt").read_text().split("=== ")[1:]:
             record.update(handle=match[1], underruns=int(match[2]))
         elif match := re.fullmatch(r"observer_status (\d+)", line):
             record["observer_status"] = int(match[1])
-        elif match := re.fullmatch(r"metadata track=(\d+) frequency=(\d+) length_ms=(\d+) elapsed_ms=(\d+) path=(.*)", line):
+        elif match := re.fullmatch(r"metadata track=(-?\d+) frequency=(\d+) length_ms=(\d+) elapsed_ms=(\d+) path=(.*)", line):
             record.update(track=int(match[1]), frequency=int(match[2]), length_ms=int(match[3]),
                           elapsed_ms=int(match[4]), path=match[5])
         elif match := re.fullmatch(r"state:\s+(\S+)", line):
@@ -47,7 +47,7 @@ for block in (directory / "samples.txt").read_text().split("=== ")[1:]:
             record["thermal_service"] = line.split()[-1]
     samples.append(record)
 
-playing = [s for s in samples if s.get("pcm_state") == "RUNNING" and s.get("track", 0) > 0]
+playing = [s for s in samples if s.get("pcm_state") == "RUNNING" and s.get("path")]
 tracks = []
 for sample in playing:
     if not tracks or tracks[-1]["path"] != sample["path"]:

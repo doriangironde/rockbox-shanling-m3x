@@ -69,8 +69,8 @@ RB=$!
 GUARD=$!
 sleep 3
 if [ "$DISPLAY" != android ]; then
-    /data/local/tmp/fbpan --blank 0 >> "$OUT.log" 2>&1
-    /data/local/tmp/fbpan --pan 0 >> "$OUT.log" 2>&1
+    /data/adb/modules/rockbox_m3x/fbpan --blank 0 >> "$OUT.log" 2>&1
+    /data/adb/modules/rockbox_m3x/fbpan --pan 0 >> "$OUT.log" 2>&1
 fi
 snapshot start >> "$OUT.txt"
 elapsed=0

@@ -16,6 +16,7 @@ sleep 10
 mkdir -p "$STAGE"
 cp "$MOD/service.sh" "$STAGE/service.sh" || exit 1
 ln -sfn "$MOD/rockbox" "$STAGE/rockbox"
+ln -sfn "$MOD/fbpan" "$STAGE/fbpan" || exit 1
 rm -f "$STAGE/disable"
 snapshot() {
     echo "=== $1 ==="

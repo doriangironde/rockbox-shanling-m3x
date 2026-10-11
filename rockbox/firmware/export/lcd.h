@@ -427,13 +427,21 @@ typedef void lcd_blockfunc_type(fb_data *address, unsigned mask, unsigned bits);
 #if LCD_DEPTH >= 24
     static inline fb_data scalar_to_fb(unsigned p)
     {
+#if LCD_PIXELFORMAT == RGBA8888
+        return (fb_data){ .r = p >> 16, .g = p >> 8, .b = p };
+#else
         union { fb_data st; unsigned sc; } convert;
         convert.sc = p; return convert.st;
+#endif
     }
     static inline unsigned fb_to_scalar(fb_data p)
     {
+#if LCD_PIXELFORMAT == RGBA8888
+        return ((unsigned)p.r << 16) | ((unsigned)p.g << 8) | p.b;
+#else
         union { fb_data st; unsigned sc; } convert;
         convert.st = p; return convert.sc;
+#endif
     }
 #define FB_RGBPACK(r_, g_, b_)      ((fb_data){.r = r_, .g = g_, .b = b_})
 #define FB_RGBPACK_LCD(r_, g_, b_)  FB_RGBPACK(r_, g_, b_)

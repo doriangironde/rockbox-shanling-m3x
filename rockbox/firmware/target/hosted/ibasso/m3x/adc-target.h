@@ -8,7 +8,5 @@
  *
  * ADC header for the Shanling M3X.
  *
- * The M3X has no ADC-key hardware buttons; its two keys are real GPIO keys
- * (soc/gpio_keys in the device tree) reported through evdev, and everything
- * else is a Goodix touchscreen. This file is intentionally empty.
+ * The M3X reports its buttons through evdev and has no ADC button channels.
  ****************************************************************************/

@@ -63,7 +63,8 @@ restore_snapshot() {
     [ ! -d "$MOD" ] || touch "$MOD/disable" || return 1
     replace_tree "$snapshot/assets" "$ASSETS" || return 1
     if [ -f "$snapshot/fbpan" ]; then
-        cp -p "$snapshot/fbpan" "$HELPER.new-$$" && mv "$HELPER.new-$$" "$HELPER" || return 1
+        cp -p "$snapshot/fbpan" "$snapshot/fbpan-restore-$$" &&
+            mv "$snapshot/fbpan-restore-$$" "$HELPER" || return 1
     else
         rm -f "$HELPER" || return 1
     fi
@@ -75,7 +76,7 @@ restore_snapshot() {
         if [ -f "$snapshot/launcher.apk" ]; then
             pm install -r "$snapshot/launcher.apk" | grep -q '^Success' || return 1
         else
-            pm uninstall "$APP" >/dev/null 2>&1 || true
+            pm uninstall "$APP" | grep -q '^Success' || return 1
         fi
     fi
     sync
@@ -113,6 +114,21 @@ case "${1:-check}" in
     *) fail 'Usage: install.sh check | install | rollback /data/adb/rockbox-m3x-backups/SNAPSHOT';;
 esac
 [ -f "$PACKAGE/SHA256SUMS" ] || fail 'Extract the complete bundle first.'
+[ -z "$("$BB" find "$PACKAGE" -type l -print)" ] || fail 'Bundle must not contain symlinks.'
+manifest_count=$("$BB" awk '
+    {
+        digest = substr($0, 1, 64); name = substr($0, 67)
+        if (length(digest) != 64 || digest ~ /[^0-9a-f]/ ||
+            substr($0, 65, 2) != "  " || name == "" ||
+            name ~ /(^|\/)\.\.?($|\/)/ || name ~ /(^\/|\/\/|\\)/ ||
+            name ~ /(^|\/)\.DS_Store$/ || name == "SHA256SUMS" || seen[name]++)
+            exit 1
+        count++
+    }
+    END { if (count == 0) exit 1; print count }
+' "$PACKAGE/SHA256SUMS") || fail 'Invalid or duplicate bundle checksum path.'
+file_count=$("$BB" find "$PACKAGE" -type f ! -name .DS_Store ! -path "$PACKAGE/SHA256SUMS" | "$BB" wc -l)
+[ "$manifest_count" -eq "$file_count" ] || fail 'Bundle has missing or unexpected files.'
 (cd "$PACKAGE"; "$BB" sha256sum -c SHA256SUMS >/dev/null) || fail 'Bundle checksum verification failed.'
 [ -e "/dev/graphics/fb0" ] && [ -e "/dev/snd/pcmC0D0p" ] || fail 'Native display/audio devices are missing.'
 [ -d "$PACKAGE/payload/assets/.rockbox" ] || fail 'Matching assets are missing.'
@@ -146,10 +162,11 @@ mkdir "$SAVE/new-module" "$SAVE/new-assets"
 [ ! -d "$ASSETS" ] || "$BB" cp -a "$ASSETS/." "$SAVE/new-assets/"
 "$BB" cp -a "$PACKAGE/payload/module/." "$SAVE/new-module/"
 cp "$PACKAGE/payload/rockbox" "$SAVE/new-module/rockbox"
+cp "$PACKAGE/payload/fbpan" "$SAVE/new-module/fbpan"
 touch "$SAVE/new-module/disable"
 chown -R 0:0 "$SAVE/new-module"
 chmod -R go-w "$SAVE/new-module"
-chmod 755 "$SAVE/new-module" "$SAVE/new-module/rockbox" "$SAVE/new-module/launch.sh" "$SAVE/new-module/service.sh" "$SAVE/new-module/post-fs-data.sh"
+chmod 755 "$SAVE/new-module" "$SAVE/new-module/rockbox" "$SAVE/new-module/fbpan" "$SAVE/new-module/launch.sh" "$SAVE/new-module/service.sh" "$SAVE/new-module/post-fs-data.sh"
 "$BB" cp -a "$PACKAGE/payload/assets/.rockbox/." "$SAVE/new-assets/"
 if [ ! -e "$SAVE/new-assets/config.cfg" ]; then
     cat > "$SAVE/new-assets/config.cfg" <<'CONFIG'
@@ -165,9 +182,7 @@ fi
 CHANGED=1
 replace_tree "$SAVE/new-assets" "$ASSETS"
 replace_tree "$SAVE/new-module" "$MOD"
-cp "$PACKAGE/payload/fbpan" "$HELPER.new-$$"
-chmod 755 "$HELPER.new-$$"
-mv "$HELPER.new-$$" "$HELPER"
+rm -f "$HELPER"
 if [ ! -e "$CARD" ] && [ ! -L "$CARD" ]; then
     touch "$SAVE/card-link-created"
     ln -s "$CARD_TARGET" "$CARD"
