@@ -191,16 +191,24 @@ The maintained `dev-a0ee34178f21` installer was exercised on the rooted firmware
 | Duplicate service launch | Refused with status 1 without restoring Android over the active player |
 | Complete regression suite | **61 tests passed**, including the new untagged-track/end-of-stream regression |
 
-Touch and Power events were injected through the real input devices; the input
-replay used pipes. Neither establishes a human-operated mechanical-button or
-finger test. USB remained connected and charging. Software PCM progress does
-not establish audible output or gapless transitions across rate changes.
+In the automated run, Touch and Power events were injected through the real
+input devices; the input replay used pipes. That run did not establish a
+human-operated mechanical-button or finger test. USB remained connected and
+charging. Software PCM progress does not establish audible output or gapless
+transitions across rate changes.
 
 The exact binary/helper hashes, sampled rates, recovery and remaining limits
 are in [the validation record](../M3X_OFFLINE_CHECKLIST.md#maintenance-build-on-hardware--2026-10-11).
 Raw captures and rollback backups remain private under `local/validation/`.
 Only the unique test music/upload/controller directories were removed from the
 player; user settings and playlist state were restored byte-for-byte.
+
+The user subsequently confirmed human-operated player buttons and USB-headphone
+switching checked and working, with normal battery drain and no overheating or
+other issues reported. These are user-confirmed results, not additional ADB
+tests. The report supplied no headset model, measured drain rate, test duration
+or temperature trace. Physical shutdown was explicitly excluded from testing,
+not reported broken.
 
 ## Workspace cleanup
 
@@ -219,7 +227,7 @@ Initial lean cleanup: -407 documentation lines across the README and tool guide.
 Dead FFT conversion, I2C force-claim, optional-hook scaffolding, commented LCD
 attempt and unused text allocation removed without a blanket rewrite.
 
-Still not checked: analog output/dropouts, unplugged battery drain, physical
-shutdown or USB/power-loss recovery, mechanical button presses, balanced output,
-all plugins, Android app storage permissions, other target cross-builds or an
-exhaustive audit of unrelated upstream/kernel code.
+Still not instrumented/checked here: analog output/dropouts, measured unplugged
+battery consumption, physical shutdown (excluded), abrupt power-loss recovery,
+balanced output, all plugins, Android app storage permissions, other target
+cross-builds or an exhaustive audit of unrelated upstream/kernel code.

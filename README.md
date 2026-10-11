@@ -27,7 +27,7 @@ firmware versions have not been validated. Back up the player before changing it
 | USB audio | Apple USB-C EarPods `05ac:110b`, playback and repeated USB/internal switching | Stereo 16-bit/44.1 kHz only; no other USB devices, microphone or headset buttons |
 | Pocket mode | Power toggles the dark screen/touch lock; music and physical controls continue | Linux stays awake; whole-system suspend is disabled |
 | Storage | Internal storage and a 128 GB FAT32 microSD, MP3/FLAC playback and Android unmount/remount | Card removal during playback and reboot persistence remain unverified; FAT32 files are limited to 4 GiB |
-| Recovery | Launch/return, installer update/rollback and Android-default reboot | Physical shutdown, unplugged battery drain, plugins and shuffle/repeat need more testing |
+| Recovery | Launch/return, installer update/rollback and Android-default reboot | Physical shutdown, measured unplugged battery consumption, plugins and shuffle/repeat need more testing |
 
 These are prior device observations, not guarantees for every build. Software
 progress and underrun counters do not measure analog dropouts. The earlier
@@ -40,6 +40,11 @@ The eight-track format sweep completed, but did not pass the strict
 uninterrupted-playback/whole-album-lock criteria. The
 [validation record](M3X_OFFLINE_CHECKLIST.md#maintenance-build-on-hardware--2026-10-11)
 identifies the tested binary and the remaining limits.
+
+The user subsequently confirmed human-operated player buttons and USB-headphone
+switching working, with normal battery drain and no overheating or other issues
+reported. These are user observations, not a measured battery/thermal soak.
+Physical shutdown was explicitly excluded from that follow-up.
 
 ## Install and use
 

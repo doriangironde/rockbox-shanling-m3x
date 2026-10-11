@@ -314,3 +314,22 @@ events were injected, not human-operated. No analog listening/dropout,
 unplugged-battery, balanced-output, physical shutdown, USB-headphone switching,
 power-loss, microSD-removal/reboot-persistence or exhaustive plugin test was
 performed in this follow-up.
+
+## User-confirmed hardware follow-up — 2026-10-11
+
+The user subsequently confirmed the following checks and observations. These
+are human-operated results, separate from the earlier injected-input/ADB runs:
+
+- **Player buttons:** Human-operated checks completed and working.
+- **USB headphones:** Switching checked and working; headset model, output rates
+  and reconnection count were not specified in this report.
+- **Battery:** Normal drain reported; no measured drain rate, test duration or
+  charging/discharging setup was supplied.
+- **Temperature and stability:** No overheating or other issues reported; no
+  temperature trace or timed soak was supplied.
+
+Physical shutdown was explicitly excluded from testing, not reported broken.
+No shutdown, reboot, firmware flash or repeat device check was performed for
+this documentation update. The user observations complement the measured
+results above; they do not change the strict mixed-rate verdict or establish
+a quantified battery/thermal operating envelope.
