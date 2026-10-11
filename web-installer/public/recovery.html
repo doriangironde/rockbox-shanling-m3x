@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>M3X boot recovery prerequisites</title><link rel="stylesheet" href="./guide.css">
+</head>
+<body><main>
+<h1>M3X boot recovery: prepare before flashing</h1>
+<p><strong>Browser rooting is not hardware-validated. Normal builds disable boot writes.</strong>
+The recorded <code>adb reboot edl</code> requires Android to boot.
+<strong>Physical EDL re-entry without Android has not been validated.</strong>
+Do not enable boot writes until a no-Android recovery-entry method is established.</p>
+<h2>Keep these offline</h2>
+<ul>
+<li>A separately saved music/settings backup. A boot backup does not contain userdata.</li>
+<li>Your complete 64 MiB boot backup and private recovery JSON. Confirm both downloaded successfully.
+Reopen the boot file in the installer to verify its SHA-256.</li>
+<li>The exact verified MSM8937.mbn programmer and stock M3X 1.75 firmware.</li>
+<li>A working native <a href="https://github.com/linux-msm/qdl" target="_blank" rel="noopener noreferrer">linux-msm/qdl</a>
+installation, tested USB access and an explicitly tested EDL-entry method.</li>
+</ul>
+<p>Firmware, programmer and Magisk binaries are user-supplied, not bundled here.
+A programmer hash identifies the recorded working file; it does not grant redistribution rights.</p>
+<h2>If the browser connection is lost</h2>
+<p>No automatic reboot or retry occurs. Stay in EDL after a partial/failed flash.
+In-session browser restore requires its own typed confirmation and full readback.
+Recovery across a closed tab is not implemented; use native QDL.</p>
+<p>Disconnect/release browser USB first. Connect only the same M3X matching the saved
+serial and disk identity. Never restore another device's backup or guess a partition address.</p>
+<p><strong>The commands below WRITE the boot partition.</strong> Use them only for the verified
+M3X 1.75 layout (512-byte sectors, boot LBA 790528, 131072 sectors). Substitute the
+name of your saved full boot backup for <code>YOUR_SAVED_BOOT_BACKUP.bin</code>.
+Use a fresh output filename for readback; do not overwrite the original backup.</p>
+<pre>qdl --skip-reset --storage=emmc MSM8937.mbn write 0/790528+131072 YOUR_SAVED_BOOT_BACKUP.bin
+qdl --skip-reset --storage=emmc MSM8937.mbn read 0/790528+131072 m3x-restored-boot-readback.bin</pre>
+<p><code>--skip-reset</code> keeps EDL active. Both files must be exactly 67,108,864 bytes,
+and both full SHA-256 values must match <code>backupSha256</code> in your recovery JSON.
+Inspect your QDL version's help first; behavior across versions/OS drivers is not validated.</p>
+<pre>python3 -c 'import hashlib,pathlib; [print(p.stat().st_size,hashlib.sha256(p.read_bytes()).hexdigest(),p) for p in map(pathlib.Path,["YOUR_SAVED_BOOT_BACKUP.bin","m3x-restored-boot-readback.bin"])]'</pre>
+<p><strong>On mismatch, do not reboot.</strong> Native EDL read/write was used during original
+port bring-up, but browser-generated backups/images and these handoffs have not
+been tested on hardware. Readback alone does not prove bootability.</p>
+<p>After a verified restore, explicitly disconnect/power-cycle. Restoring stock boot
+removes the newly installed Magisk root/audio fix; a diagnostic backup instead restores
+that player's previously backed-up boot image. The Magisk manager APK may remain installed.</p>
+<p><a href="./index.html">Return to installer</a></p>
+</main></body></html>

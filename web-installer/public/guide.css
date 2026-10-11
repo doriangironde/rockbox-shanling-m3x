@@ -1,0 +1,5 @@
+:root { color-scheme: dark; font-family: system-ui, sans-serif; background: #0d1117; color: #e6edf3; }
+main { max-width: 850px; margin: 2rem auto; padding: 1rem; line-height: 1.7; }
+a { color: #80c9ff; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #161b22; padding: 1rem; border: 1px solid #30363d; }
+strong { color: #ffd28b; }

@@ -11,6 +11,8 @@ release, a replacement firmware image, or a ZIP to flash in recovery/Magisk.
   Download the installer ZIP and its matching source ZIP; read the release notes
   and requirements first. GitHub's automatic source downloads are not installers.
 - **Install, update or roll back:** [installation guide](tools/m3x/INSTALL.md).
+- **Browser installer:** [open the web installer](https://doriangironde.github.io/rockbox-shanling-m3x/) · [source and development notes](web-installer/README.md).
+  Not yet hardware-validated; browser boot-partition writes remain disabled.
 - **Build or contribute:** [development tools](tools/m3x/README.md) and the build steps below.
 - **Understand the hardware limits:** [validation record and remaining checks](M3X_OFFLINE_CHECKLIST.md).
 - **Maintenance review:** [Ponytail findings, fixes and verification](docs/PONYTAIL_REVIEW.md).
@@ -20,7 +22,7 @@ release, a replacement firmware image, or a ZIP to flash in recovery/Magisk.
 
 The supported development setup is **Shanling M3X firmware 1.75, Android 7.1.1
 (API 25), Magisk root and the existing I2C5 GPIO18/19 device-tree audio fix**.
-The installer does not root the player or apply that boot-image fix. Other
+The released ZIP/CLI installer does not root the player or apply that boot-image fix. Other
 firmware versions have not been validated. Back up the player before changing it.
 
 | Area | Recorded device results | Limits |

@@ -7,6 +7,16 @@
 /ndk-*.zip
 /Magisk*.apk
 
+# Browser installer generated dependencies, bundles and test captures.
+/web-installer/node_modules/
+/web-installer/dist/
+/web-installer/test-results/
+/web-installer/playwright-report/
+/web-installer/*.img
+/web-installer/*.bin
+/web-installer/*.mbn
+/web-installer/*.apk
+
 # Old workspace locations, if an earlier tool recreates them.
 /backups/
 /device/
