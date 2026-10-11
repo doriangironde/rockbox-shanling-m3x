@@ -40,7 +40,7 @@ html { scroll-padding-top: 6rem; }
 body { margin: 0; background: var(--background); color: var(--text); line-height: 1.5; overflow-y: scroll; }
 a { color: var(--link); text-decoration: none; }
 a:hover { text-decoration: underline; }
-a:focus-visible, button:focus-visible, input:focus-visible, pre:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible, pre:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
 .site-header { background: #212121; color: #ffffff; }
 .site-header nav { max-width: 1080px; margin-inline: auto; }
 .site-header ul { list-style: none; display: flex; flex-wrap: wrap; margin: 0; padding: 0; align-items: stretch; }
@@ -61,15 +61,12 @@ li { margin-block: 0; }
 ul { padding-left: 2.5rem; }
 section { margin-block: 2rem; }
 section h2 { margin-top: 0; }
-#table-of-contents { margin-block: 1.5rem 2rem; }
-#table-of-contents ul { margin-block: 0; }
-#table-of-contents h2 { margin-top: 0; }
+details { border-top: 1px solid var(--line); padding-block: .75rem; }
+summary { padding-block: .25rem; font-weight: 700; cursor: pointer; }
+details section:last-child { margin-bottom: .5rem; }
 .inline-note, .supporting-text { color: var(--muted); }
 .supporting-text { font-size: .92rem; }
 .warning-text { color: var(--warning); }
-.notice { margin-block: 1.5rem; }
-.notice p { margin: 1rem 0; }
-.notice-title { font-weight: 700; color: var(--warning); }
 #write-policy { font-weight: 700; }
 .session-status { position: sticky; top: 0; z-index: 2; background: var(--background); border-block: 1px solid var(--line); padding-top: .2rem; margin-block: 1.2rem; }
 .session-status p { font-size: .9rem; margin: .45rem 0; max-height: 6rem; overflow: auto; }

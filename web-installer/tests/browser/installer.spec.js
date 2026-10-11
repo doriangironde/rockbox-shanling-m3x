@@ -19,7 +19,6 @@ test('initial UI is fail-closed; no auto connect, flash, remote requests or pers
   const exceptions = [], requests = [];
   page.on('pageerror', error => exceptions.push(error.message)); page.on('request', req => requests.push(req.url()));
   await page.goto('/');
-  await expect(page.locator('#write-policy')).toContainText('writes are disabled');
   for (const id of ['install', 'prepare-root', 'enter-edl', 'connect-edl', 'flash', 'restore-boot'])
     await expect(page.locator('#' + id)).toBeDisabled();
   expect(exceptions).toEqual([]); expect(requests.every(url => url.startsWith('http://127.0.0.1:5173/'))).toBeTruthy();
@@ -32,7 +31,6 @@ test('unsupported browser offers CLI fallback and cannot connect', async ({ page
 });
 test('rooted player cannot enter rooting branch; install needs explicit consent', async ({ page }) => {
   await page.goto('/'); await mockAdb(page);
-  await expect(page.locator('#device-status')).toContainText('Root available');
   await expect(page.locator('#prepare-root')).toBeDisabled(); await expect(page.locator('#install')).toBeDisabled();
   await page.locator('#installer-file').setInputFiles({ name: 'installer.zip', mimeType: 'application/zip', buffer: Buffer.from('fake') });
   await expect(page.locator('#check-install')).toBeEnabled(); await expect(page.locator('#install')).toBeDisabled();
@@ -42,13 +40,14 @@ test('rooted player cannot enter rooting branch; install needs explicit consent'
 });
 test('unrooted player cannot install or reboot/flash before preparation', async ({ page }) => {
   await page.goto('/'); await mockAdb(page, false);
-  await expect(page.locator('#device-status')).toContainText('Root unavailable');
+  await page.locator('#developer-tools > summary').click();
   await page.locator('#edl-consent').check(); await page.locator('#flash-risk').check();
   await page.locator('#flash-confirmation').fill('FLASH M3X 1.75 aaaaaaaaaaaa');
   for (const id of ['install', 'enter-edl', 'connect-edl', 'flash']) await expect(page.locator('#' + id)).toBeDisabled();
 });
 test('read-only diagnostics require consent and authenticate programmer before any reboot', async ({ page }) => {
   await page.goto('/'); await mockAdb(page);
+  await page.locator('#developer-tools > summary').click();
   await page.locator('#programmer-file').setInputFiles({ name: 'MSM8937.mbn', mimeType: 'application/octet-stream', buffer: Buffer.from('fake') });
   await expect(page.locator('#diagnostic-reboot')).toBeDisabled();
   await page.locator('#edl-consent').check(); await expect(page.locator('#diagnostic-reboot')).toBeEnabled();

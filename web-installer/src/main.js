@@ -14,8 +14,8 @@ const log = value => { $('log').textContent = ($('log').textContent + value + '\
 const progress = value => { $('progress').value = value; };
 $('release-link').href = RELEASE.page;
 const supported = !!navigator.usb && window.isSecureContext;
-$('compatibility').textContent = supported ? 'WebUSB available. USB selection and authorization are always explicit.' :
-  'Requires desktop Chrome/Edge over HTTPS or localhost. No browser USB support here; use the CLI installer.';
+$('compatibility').textContent = supported ? 'USB connection available.' :
+  'USB unavailable. Use desktop Chrome/Edge over HTTPS or localhost, or use the CLI installer.';
 if (writesEnabled) $('write-policy').textContent =
   'EXPERIMENTAL DEVELOPER BUILD: partition writes enabled by build-time opt-in. Browser rooting is NOT hardware-validated.';
 
@@ -78,7 +78,7 @@ bind('connect', 'Connecting and checking M3X', async () => {
   try { context = await adb.preflight(); }
   catch (error) { await adb.close(); adb = undefined; context = undefined; throw error; }
   $('device-status').textContent = `${context.model}, firmware ${context.firmware}, battery ${context.battery}%. ` +
-    (context.rooted ? 'Root available. Use Rockbox installation path.' : 'Root unavailable/denied. Root preparation requires an actually unrooted player.');
+    (context.rooted ? 'Root available. Continue to step 3.' : 'Root unavailable/denied. Installation requires Magisk root; check its ADB permissions if already rooted.');
   const connected = adb;
   connected.adb.disconnected.then(() => {
     if (adb === connected) { connected.credentials.forget(); adb = undefined; $('device-status').textContent = 'ADB disconnected; reconnect explicitly.'; update(); }

@@ -25,9 +25,12 @@ when WebUSB cannot claim an interface. Browser behavior on those OSes is unteste
 ## Published web installer
 
 [Open the GitHub Pages installer](https://doriangironde.github.io/rockbox-shanling-m3x/).
-The page follows a GrapheneOS-style, single-column installation guide with section
-anchors, inline controls, system light/dark colors and keyboard navigation. Its
-styling and audio-wave icon are original; no GrapheneOS branding or assets are used.
+The normal installation is five steps: prepare, connect, verify the installer ZIP,
+install, then open Rockbox. It requires an already-rooted M3X with the audio fix.
+Connection help, snapshot rollback and experimental root/EDL tools are collapsed
+by default; their controls and safety checks remain available. The single-column
+guide supports light/dark colors and keyboard navigation, including disclosure
+controls. Styling and the audio-wave icon are original, not GrapheneOS assets.
 
 `.github/workflows/pages.yml` installs the pinned dependencies, runs the unit suite,
 builds `web-installer/dist/` and deploys only that directory on relevant pushes to
