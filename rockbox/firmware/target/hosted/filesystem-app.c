@@ -221,6 +221,21 @@ const char * handle_special_dirs(const char *dir, unsigned flags,
 
     dir = handle_special_links(dir, flags, buf, bufsize);
 #endif
+#ifdef M3X_RUNTIME_DIR
+    /* Runtime code is private; bypass the shared-storage pivot. Match a whole
+     * path component, not e.g. /.rockbox-runtime-copy. */
+    const size_t runtime_len = sizeof(M3X_RUNTIME_DIR) - 1;
+    if (!strncmp(dir, M3X_RUNTIME_DIR, runtime_len) &&
+        (dir[runtime_len] == '/' || dir[runtime_len] == '\0'))
+    {
+        const char *relative = dir + runtime_len;
+        if (*relative == '/')
+            relative++;
+        if (path_append(buf, M3X_RUNTIME_ROOT, relative, bufsize) >= bufsize)
+            return NULL;
+        return buf;
+    }
+#endif
 #ifdef PIVOT_ROOT
 #define PIVOT_ROOT_LEN (sizeof(PIVOT_ROOT)-1)
     /* Prepend root prefix to find actual path */

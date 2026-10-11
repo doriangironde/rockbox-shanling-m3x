@@ -30,6 +30,9 @@ preflight() {
     ! pidof rockbox rockbox-dbg >/dev/null || fail 'Stop Rockbox first.'
     [ ! -L "$MOD" ] && [ ! -L "$ASSETS" ] || fail 'Module/assets must be real directories.'
     [ ! -e "$MOD" ] || [ -f "$MOD/disable" ] || fail 'Disable Rockbox boot autostart first.'
+    # Do not overlay root-installed files through links from shared storage.
+    [ ! -d "$ASSETS" ] || [ -z "$("$BB" find "$ASSETS" -type l -print)" ] ||
+        fail 'Shared assets must not contain symlinks; move them aside first.'
 }
 lock_install() {
     mkdir -p "$STATE" "$BACKUPS"
@@ -132,6 +135,10 @@ file_count=$("$BB" find "$PACKAGE" -type f ! -name .DS_Store ! -path "$PACKAGE/S
 (cd "$PACKAGE"; "$BB" sha256sum -c SHA256SUMS >/dev/null) || fail 'Bundle checksum verification failed.'
 [ -e "/dev/graphics/fb0" ] && [ -e "/dev/snd/pcmC0D0p" ] || fail 'Native display/audio devices are missing.'
 [ -d "$PACKAGE/payload/assets/.rockbox" ] || fail 'Matching assets are missing.'
+[ -f "$PACKAGE/payload/runtime/codecs/mpa.codec" ] &&
+    [ -f "$PACKAGE/payload/runtime/rocks/viewers/properties.rock" ] || fail 'Private runtime modules are missing.'
+[ -z "$("$BB" find "$PACKAGE/payload/assets" -type f \( -name '*.codec' -o -name '*.rock' -o -name '*.ovl' -o -name '*.lua' \) -print)" ] ||
+    fail 'Executable modules/scripts must not be bundled as shared assets.'
 [ ! -e "$PACKAGE/payload/assets/.rockbox/config.cfg" ] &&
     [ ! -e "$PACKAGE/payload/assets/.rockbox/.playlist_control" ] || fail 'Bundle must not contain user settings or resume state.'
 free_kb=$(df -k "/data/" | "$BB" awk 'NR==2 {print $4}')
@@ -160,14 +167,30 @@ echo "Backup: $SAVE"
 mkdir "$SAVE/new-module" "$SAVE/new-assets"
 [ ! -d "$MOD" ] || "$BB" cp -a "$MOD/." "$SAVE/new-module/"
 [ ! -d "$ASSETS" ] || "$BB" cp -a "$ASSETS/." "$SAVE/new-assets/"
+# Shared files can change after preflight. Check the now-private staged copy
+# before any root overlay writes; never follow a copied shared-storage link.
+[ -z "$("$BB" find "$SAVE/new-assets" -type l -print)" ] ||
+    fail 'Staged shared assets must not contain symlinks.'
 "$BB" cp -a "$PACKAGE/payload/module/." "$SAVE/new-module/"
 cp "$PACKAGE/payload/rockbox" "$SAVE/new-module/rockbox"
 cp "$PACKAGE/payload/fbpan" "$SAVE/new-module/fbpan"
 touch "$SAVE/new-module/disable"
+# Build runtime exclusively from verified bundle, never old/shared modules.
+rm -rf "$SAVE/new-module/runtime"
+"$BB" cp -a "$PACKAGE/payload/runtime" "$SAVE/new-module/runtime"
+"$BB" find "$SAVE/new-module/runtime" -type d -exec chmod 755 {} \;
+"$BB" find "$SAVE/new-module/runtime" -type f -exec chmod 644 {} \;
 chown -R 0:0 "$SAVE/new-module"
 chmod -R go-w "$SAVE/new-module"
 chmod 755 "$SAVE/new-module" "$SAVE/new-module/rockbox" "$SAVE/new-module/fbpan" "$SAVE/new-module/launch.sh" "$SAVE/new-module/service.sh" "$SAVE/new-module/post-fs-data.sh"
 "$BB" cp -a "$PACKAGE/payload/assets/.rockbox/." "$SAVE/new-assets/"
+# Preserve plugin settings/data, retire native code in old shared layout.
+# Previous copies remain in the private rollback snapshot.
+for directory in codecs rocks; do
+    [ ! -d "$SAVE/new-assets/$directory" ] ||
+        "$BB" find "$SAVE/new-assets/$directory" -type f \( -name '*.codec' -o -name '*.rock' -o -name '*.ovl' \) -exec rm -f {} \;
+done
+mkdir -p "$SAVE/new-assets/rocks/games" "$SAVE/new-assets/rocks/apps" "$SAVE/new-assets/rocks/demos" "$SAVE/new-assets/rocks/viewers"
 if [ ! -e "$SAVE/new-assets/config.cfg" ]; then
     cat > "$SAVE/new-assets/config.cfg" <<'CONFIG'
 resume on startup: off

@@ -31,6 +31,15 @@ headers. If compiler/linker flags change, use a clean native build: Make does no
 track changed flags as object dependencies. Never deploy mismatched native
 executables, codecs or plugins.
 
+Native module paths now use a private runtime inside the root-owned Magisk
+module. The standalone installer splits the ordinary `rockbox.zip` into private
+runtime code/support files and shared data; extracting that ZIP into shared
+storage is no longer a valid native update. Simulator paths remain unchanged.
+The root loader gate has sanitizer-backed path/ownership/mode/symlink replays
+and limited device loading/migration/playback checks. See the validation record
+for the exact native/launcher hashes, heavy-plugin thermal stop and remaining
+USB, analog, battery and broader plugin checks.
+
 ## Desktop UI and theme
 
 Build the macOS SDL2 simulator using the [root build steps](../../README.md#test-without-the-player).
@@ -69,8 +78,8 @@ return to Android, disable boot autostart and stop Rockbox before a direct probe
 Begin with a cool player and headphones disconnected; output level is not
 calibrated. Root commands below are diagnostics, not normal user instructions.
 
-The normal launcher stops both Android app runtimes before SurfaceFlinger and
-restores them when the player exits. Native thermal services stay active. It
+The normal launcher stops both Android app runtimes, then stops/confirms
+BootAnimation before SurfaceFlinger, and restores Android when the player exits. Native thermal services stay active. It
 stops at **CPU sensor0 ≥55 °C, battery ≥40 °C, or unavailable sensor readings**.
 These are conservative test cutoffs, not hardware specifications. Startup waits
 at most 115 seconds for cooling. Whole-system suspend stays disabled because the

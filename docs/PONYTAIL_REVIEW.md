@@ -2,6 +2,43 @@ What this change does: The M3X workspace now separates public source, generated 
 
 # Ponytail review — 2026-10-10; hardware follow-up — 2026-10-11
 
+## Subsequent private-runtime work (host and limited device follow-up)
+
+Current sources address finding 1's shared native-module loading: installation
+puts runtime files under the root-owned Magisk module, rebuilds them solely from
+the verified bundle, normalizes permissions and removes old shared native code
+from the active installation while retaining backups. M3X virtual module paths
+bypass the shared-storage filesystem pivot. The centralized `lc_open` gate
+rejects outside paths, dot/empty components, symlinks, non-root owners and
+writable runtime ancestors/files before `dlopen` can execute constructors.
+Plugin settings/data remain at their existing shared paths; Reversi's unused
+save-path definition now uses the data-directory macro (no new save feature).
+Simulator paths remain unchanged.
+
+Host regressions cover path translation and loader rejection under sanitizers,
+installer migration, permissions, rollback, failure recovery and archive splitting.
+Host regressions alone do not establish hardware behavior or a full root sandbox:
+explicitly selected Lua scripts still use the root plugin API, and shared input parsers remain outside
+this focused change. Finding 2 (plugin-audio USB switching) remains open. Earlier
+review/device verdicts below describe the earlier maintenance build.
+
+Limited device follow-up then passed actual update/rollback, real Android
+module/header loading and unsafe-fixture rejection, MP3/48 kHz FLAC playback,
+pocket lock, Chopper configuration save/relaunch and normal Android return.
+The heavy plugin sequence reached the CPU cutoff during Boomshine startup;
+thermal recovery worked, but sustained heavy-plugin operation is unvalidated.
+A new Android BootAnimation tombstone during the first takeover exposed a
+compositor-client race. `service.sh` now stops/confirms boot animation before
+SurfaceFlinger; missing/stuck-service and live-process replays fail closed.
+The full host gate passed 69 tests. Actual live-animation and normal launcher
+round trips with that fix exited 0, restored Android and added no tombstones.
+See the public validation record for exact hashes and evidence limits.
+
+The user subsequently reported “Everything works, just tested!” after testing the
+installed update. This general user confirmation complements the device evidence;
+unspecified steps/duration do not close specialized checks or supersede the
+recorded heavy-plugin thermal cutoff. No binaries changed for this record update.
+
 Ponytail 5.1.0 was installed from `DietrichGebert/ponytail` using the documented
 omp marketplace commands. Its review instructions were read and applied here.
 The installed plugin is user-wide; a new omp session loads its lifecycle hooks.

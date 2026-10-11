@@ -48,8 +48,16 @@
 #undef ROCKBOX_LIBRARY_PATH
 #define ROCKBOX_LIBRARY_PATH ROCKBOX_DIR
 
+#if defined(SHANLING_M3X) && !defined(SIMULATOR)
+/* Virtual paths: filesystem-app.c maps these outside shared Android storage. */
+#define M3X_RUNTIME_DIR     "/.rockbox-runtime"
+#define M3X_RUNTIME_ROOT    "/data/adb/modules/rockbox_m3x/runtime"
+#define PLUGIN_DIR          M3X_RUNTIME_DIR "/rocks"
+#define CODECS_DIR          M3X_RUNTIME_DIR "/codecs"
+#else
 #define PLUGIN_DIR          ROCKBOX_DIR "/rocks"
 #define CODECS_DIR          ROCKBOX_DIR "/codecs"
+#endif
 
 #define RB_ROOT_VOL_HIDDEN(v)   (IF_MV_VOL(v) == 0)
 #define RB_ROOT_CONTENTS_DIR    "/" IF_MV("<0>")
@@ -84,7 +92,14 @@
 #define PLUGIN_DEMOS_DIR    PLUGIN_DIR "/demos"
 #define VIEWERS_DIR         PLUGIN_DIR "/viewers"
 
-#if defined(APPLICATION) && \
+#if defined(SHANLING_M3X) && !defined(SIMULATOR)
+/* Keep existing plugin settings/data paths, never place them beside code. */
+#define PLUGIN_DATA_DIR          ROCKBOX_DIR "/rocks"
+#define PLUGIN_GAMES_DATA_DIR    PLUGIN_DATA_DIR "/games"
+#define PLUGIN_APPS_DATA_DIR     PLUGIN_DATA_DIR "/apps"
+#define PLUGIN_DEMOS_DATA_DIR    PLUGIN_DATA_DIR "/demos"
+#define VIEWERS_DATA_DIR         PLUGIN_DATA_DIR "/viewers"
+#elif defined(APPLICATION) && \
         !(defined(SAMSUNG_YPR0) || defined(SAMSUNG_YPR1) || \
           defined(DX50) || defined(DX90) || defined(SHANLING_M3X) || defined(SONY_NWZ_LINUX) || \
           defined(HIBY_LINUX) || defined(FIIO_M3K_LINUX) || defined(N3DS))

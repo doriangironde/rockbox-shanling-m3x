@@ -41,7 +41,11 @@ class InstallerTests(unittest.TestCase):
         for name, data in {
             'payload/rockbox': b'new-player', 'payload/fbpan': b'new-helper',
             'payload/Rockbox-M3X.apk': b'new-apk', 'payload/release-id': b'dev-test\n',
-            'payload/assets/.rockbox/codecs/mpa.codec': b'new-codec',
+            'payload/runtime/codecs/mpa.codec': b'new-codec',
+            'payload/runtime/rocks/viewers/properties.rock': b'new-plugin',
+            'payload/runtime/rocks/viewers/lua/helper.lua': b'trusted-script',
+            'payload/assets/.rockbox/rockbox-info.txt': b'new-info',
+            'payload/assets/.rockbox/rocks/games/levels.dat': b'new-levels',
             **{'payload/module/' + n: b'new-' + n.encode() for n in
                ('launch.sh', 'service.sh', 'post-fs-data.sh', 'module.prop')},
         }.items():
@@ -74,7 +78,10 @@ if sys.argv[1] == 'cp' and flag.exists() and sys.argv[-2].endswith('/new-module'
     flag.unlink()
     sys.exit(1)
 command = {checksum!r} if sys.argv[1] == 'sha256sum' else [sys.argv[1]]
-sys.exit(subprocess.call(command + sys.argv[2:]))''')
+status = subprocess.call(command + sys.argv[2:])
+if sys.argv[1] == 'cp' and sys.argv[-1].endswith('/new-assets/') and (flag.parent / 'inject-stage-link').exists():
+    (Path(sys.argv[-1]) / 'rockbox-info.txt').symlink_to(flag.parent / 'unrelated-root-file')
+sys.exit(status)''')
         self.python_command('pm', f'''from pathlib import Path
 import shutil, sys
 base = Path({str(self.base)!r})
@@ -144,13 +151,86 @@ elif sys.argv[1] == 'uninstall':
         self.assertEqual((self.assets / 'config.cfg').read_bytes(), b'volume: -43\n')
         self.assertEqual((self.assets / '.playlist_control').read_bytes(), b'old-resume')
         self.assertEqual((self.assets / 'custom playlist.m3u8').read_bytes(), b'/Music/my-song.mp3\n')
-        self.assertEqual((self.assets / 'codecs/mpa.codec').read_bytes(), b'new-codec')
+        self.assertFalse((self.assets / 'codecs/mpa.codec').exists())
+        self.assertEqual((self.mod / 'runtime/codecs/mpa.codec').read_bytes(), b'new-codec')
+        self.assertEqual((self.mod / 'runtime/codecs/mpa.codec').stat().st_mode & 0o777, 0o644)
+        self.assertEqual((self.mod / 'runtime/rocks/viewers/properties.rock').read_bytes(), b'new-plugin')
         self.assertTrue(self.card.is_symlink())
         self.assertEqual(self.apk.read_bytes(), b'new-apk')
         result = self.run_install('rollback', self.snapshot())
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assert_old()
         self.assertFalse(self.card.is_symlink())
+
+    def test_runtime_update_discards_old_code_but_preserves_shared_plugin_data(self):
+        self.put(self.mod / 'runtime/rocks/obsolete.rock', b'old-private-code')
+        self.put(self.assets / 'rocks/games/custom.rock', b'untrusted-code')
+        self.put(self.assets / 'rocks/games/reversi.rev', b'saved-game')
+        (self.mod / 'runtime/rocks/obsolete.rock').chmod(0o666)
+        result = self.run_install()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((self.mod / 'runtime/rocks/obsolete.rock').exists())
+        self.assertFalse((self.assets / 'rocks/games/custom.rock').exists())
+        self.assertEqual((self.assets / 'rocks/games/reversi.rev').read_bytes(), b'saved-game')
+        self.assertEqual((self.assets / 'rocks/games/levels.dat').read_bytes(), b'new-levels')
+        result = self.run_install('rollback', self.snapshot())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.mod / 'runtime/rocks/obsolete.rock').read_bytes(), b'old-private-code')
+        self.assertEqual((self.assets / 'rocks/games/custom.rock').read_bytes(), b'untrusted-code')
+        self.assert_old()
+
+    def test_missing_runtime_and_shared_executable_payload_are_rejected(self):
+        runtime = self.bundle / 'payload/runtime/codecs/mpa.codec'
+        data = runtime.read_bytes()
+        runtime.unlink()
+        self.checksums()
+        result = self.run_install()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Private runtime modules are missing', result.stderr)
+        runtime.write_bytes(data)
+        for extension in ('rock', 'codec', 'ovl', 'lua'):
+            with self.subTest(extension=extension):
+                path = self.bundle / ('payload/assets/.rockbox/rocks/unsafe.' + extension)
+                self.put(path, b'code')
+                self.checksums()
+                result = self.run_install()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('must not be bundled as shared assets', result.stderr)
+                path.unlink()
+        self.assertFalse(self.backups.exists())
+        self.assert_old()
+
+    def test_private_runtime_modes_are_normalized_not_copied_from_bundle(self):
+        for path in (self.bundle / 'payload/runtime').rglob('*'):
+            path.chmod(0o777)
+        result = self.run_install()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        runtime = self.mod / 'runtime'
+        for path in [runtime, *runtime.rglob('*')]:
+            self.assertEqual(path.stat().st_mode & 0o777,
+                             0o755 if path.is_dir() else 0o644, str(path))
+
+    def test_link_created_during_shared_copy_is_rejected_before_overlay(self):
+        victim = self.base / 'unrelated-root-file'
+        victim.write_bytes(b'keep')
+        (self.base / 'inject-stage-link').touch()
+        result = self.run_install()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Staged shared assets must not contain symlinks', result.stderr)
+        self.assertEqual(victim.read_bytes(), b'keep')
+        self.assertTrue((self.snapshot() / 'snapshot-ready').exists())
+        self.assert_old()
+
+    def test_shared_asset_symlink_cannot_redirect_root_overlay(self):
+        victim = self.base / 'unrelated-root-file'
+        victim.write_bytes(b'keep')
+        (self.assets / 'rockbox-info.txt').symlink_to(victim)
+        result = self.run_install()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Shared assets must not contain symlinks', result.stderr)
+        self.assertEqual(victim.read_bytes(), b'keep')
+        self.assertFalse(self.backups.exists())
+        self.assert_old()
 
     def test_module_helper_update_and_rollback_do_not_recreate_legacy_helper(self):
         self.helper.unlink()
@@ -173,6 +253,7 @@ elif sys.argv[1] == 'uninstall':
         self.assertIn('Previous installation restored', result.stderr)
         self.assert_old()
         self.assertTrue((self.snapshot() / 'snapshot-ready').exists())
+        self.assertFalse((self.mod / 'runtime').exists())
         self.assertFalse(self.card.is_symlink())
 
     def test_corrupt_bundle_is_rejected_before_replacement(self):
@@ -377,6 +458,26 @@ class BundleTests(unittest.TestCase):
                 z.writestr('.rockbox/wps/a theme.wps', b'theme')
             self.assertEqual(package.asset_files(archive), {
                 '.rockbox/codecs/test.codec': b'codec', '.rockbox/wps/a theme.wps': b'theme'})
+
+    def test_runtime_split_keeps_code_and_lua_private_and_plugin_data_shared(self):
+        package = self.load('package-installer')
+        files = package.split_assets({
+            '.rockbox/codecs/mpa.codec': b'codec',
+            '.rockbox/rocks/viewers/properties.rock': b'plugin',
+            '.rockbox/rocks/viewers/jpeg.ovl': b'overlay',
+            '.rockbox/rocks/viewers/lua/helper.lua': b'script',
+            '.rockbox/rocks/games/levels.dat': b'levels',
+            '.rockbox/themes/test.cfg': b'theme',
+        })
+        self.assertEqual(files, {
+            'payload/runtime/codecs/mpa.codec': b'codec',
+            'payload/runtime/rocks/viewers/properties.rock': b'plugin',
+            'payload/runtime/rocks/viewers/jpeg.ovl': b'overlay',
+            'payload/runtime/rocks/viewers/lua/helper.lua': b'script',
+            'payload/runtime/rocks/games/levels.dat': b'levels',
+            'payload/assets/.rockbox/rocks/games/levels.dat': b'levels',
+            'payload/assets/.rockbox/themes/test.cfg': b'theme',
+        })
 
     def test_package_validation_rejects_stale_modules_with_python_optimization(self):
         import zipfile

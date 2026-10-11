@@ -8,7 +8,8 @@ Later sections supersede earlier pending items. Private evidence now lives in
 
 - Balanced output, both DACs, absolute volume/balance calibration and filters.
 - Physical shutdown, whole-system suspend and unplugged battery consumption.
-- Plugins, shuffle/repeat, and USB switching during plugin-generated audio.
+- Broader plugins, shuffle/repeat, and USB switching during plugin-generated audio;
+  heavy-plugin thermal behavior after the recorded CPU cutoff.
 - Physical microSD removal during playback and microSD reboot persistence.
 - Analog dropouts; software progress and underrun counters do not measure them.
 - Re-test changed native builds on the device. Host replays and the desktop
@@ -333,3 +334,139 @@ No shutdown, reboot, firmware flash or repeat device check was performed for
 this documentation update. The user observations complement the measured
 results above; they do not change the strict mixed-rate verdict or establish
 a quantified battery/thermal operating envelope.
+
+## Private native runtime — 2026-10-11 (host-only)
+
+Moved native codecs/plugins/overlays and bundled Lua support files out of shared
+Android storage. The installer builds `/data/adb/modules/rockbox_m3x/runtime/`
+only from the verified bundle, normalizes root ownership and permissions, and
+backs up the complete old layout. Old shared native modules are retired from
+the active installation; shared settings, plugin data, playlists and music stay
+in place. Preflight and private staging checks reject shared asset symlinks
+before root overlay copies. M3X virtual runtime paths bypass the shared-storage
+pivot; simulator paths stay unchanged. Reversi's unused save-path definition now
+uses the data-directory macro; this does not add game-saving functionality.
+
+The central native `lc_open` checks the runtime prefix, rejects traversal/empty
+components and verifies root-owned, non-group/other-writable directories and a
+regular module file with no symlink components before calling `dlopen`. This
+also covers overlays and arbitrary plugin API loader calls. It is not a complete
+root sandbox: explicitly selected Lua scripts retain the root plugin API, and
+shared data parsers and installer authentication are not addressed by this gate.
+
+Host verification:
+
+- Native ARM64 player and simulator rebuilt; matching ZIP contains all 56 native
+  codec/plugin modules. Device input/filesystem probes and framebuffer helper
+  cross-compiled without deploying them.
+- Sanitized replay uses real filesystem/path/loader code with mocked metadata
+  and linker calls. Checks private module paths, unchanged shared data paths,
+  bounded path buffers and rejection before any untrusted `dlopen` call.
+- Installer/archive regressions cover legacy migration, removal of stale native
+  code, preservation of saved plugin data, runtime mode normalization, shared
+  executable rejection, staged-link injection and rollback/failure restoration.
+- Actual simulator smoke decoded MP3 to file (71,680 stereo frames); theme replay
+  passed scrolling, pause/resume and Home (92,160 frames, seven screenshots).
+  Playback screenshot was inspected. No audible output was used.
+- An initial full run while the simulator was rebuilding tripped the existing
+  PCM control-latency assertion (`elapsed < 0.1`). The serial rerun passed all 67
+  then-current tests with that threshold unchanged (maximum control wait
+  73.747 ms). After adding the staged-link regression, the final complete host
+  gate passed **68 tests** in 108.263 seconds and matched all 56 packaged modules.
+  Logs retain both the initial failure and subsequent passes.
+
+Native SHA-256:
+
+```text
+rockbox  d4c54f16521e13f3d321f92e0fc36cb3d252a0dd637fe0a76d421d2911a88608
+fbpan    49723154df96830f93834a3737a1e189918c4adf5fbdb0424afe3873aa5990cc
+```
+
+No player connection, installation, shutdown or boot-image flash occurred.
+Earlier device observations do not validate this new binary/layout. Next device
+checks: installer update/rollback; private codec/plugin loading; MP3/FLAC and USB
+music switching; plugin launch/save/relaunch; Android return and screen lock.
+Plugin-generated audio USB switching remains a separate unresolved issue.
+Private host evidence: `local/validation/private-runtime-20261011/`.
+
+## Private runtime on hardware and BootAnimation fix — 2026-10-11
+
+Connected rooted M3X firmware 1.75/API 25 with the existing audio fix. The initial
+private-runtime bundle was `dev-eec3f9f1071d`; the subsequent launcher-only fix was
+installed/tested as `dev-2371b9ca3dd9`. Native player/helper hashes remain those in
+the preceding section. Final production launcher:
+
+```text
+service.sh  44684c34ff2a491d2c3e167a5f650b6258445b8a466f2da459c3314452aaeee3
+```
+
+- **Update/rollback:** Preflight, update, actual rollback and reinstall passed.
+  Rollback restored original native/helper/settings/playlist hashes and shared
+  codec layout; reinstall returned to private runtime. The launcher fix was then
+  installed with another private snapshot. All 125 runtime code/support files
+  matched the bundle, with no symlinks, non-root owners or group/other write bits.
+- **Device probes:** Live input/battery replay and real playlist-control
+  create/write/fsync/rotate/reopen/removal passed. Actual Android `dlopen` loaded
+  private MP3 codec and properties plugin headers. Valid ELF copies in shared
+  storage, dot traversal, symlinks and actual non-root/writable fixture files and
+  directories were rejected before loading. Only disposable fixture copies were
+  modified; installed modules were not altered.
+- **MP3/FLAC:** A 136.62-second licensed MP3 was observed from 1.151 to 135.029
+  seconds (63 samples, 133.84 seconds of telemetry), with native screen lock and
+  dark backlight in 58 samples. A separate 12-second 48 kHz FLAC was observed
+  from 1.066 to 11.861 seconds (six samples, 10.75 seconds of telemetry). Each
+  interval stayed PCM RUNNING with zero reported underruns, advancing pointers
+  and no observed elapsed jumps; output was stereo S16_LE at 44.1/48 kHz.
+  Metadata cleared after each track without a stop/seek command. Playback CPU
+  was 40–42°C; battery was 30.7–31.2°C. This is targeted sequential testing,
+  **not** a new mixed-rate/gapless or whole-album strict-report pass.
+- **Plugin data:** Chopper loaded from private runtime, ran a game, saved
+  `highscore: 400` through shared `.rockbox/rocks/chopper.cfg`, then unloaded and
+  relaunched with the same saved value. Reversi loaded, accepted a move and quit.
+  Its save-path macro is unused upstream; no Reversi save/reload claim is made.
+- **Heavy-plugin limit:** The sequence reached CPU sensor0 56°C while Boomshine
+  was starting (53°C already observed before its launch). The unchanged 55°C
+  guard killed Rockbox with status 137 and restored all four Android/thermal
+  services; battery was 30.7°C at cutoff. No claim that Boomshine alone caused
+  the rise, or that heavy-plugin sustained use passes. No cutoff was raised.
+- **Recovery:** A subsequent normal app launch and native Return to Android
+  exited 0, closed PCM and released the launch lock. Android home was inspected.
+- **BootAnimation race/fix:** The first takeover added one Android BootAnimation
+  SIGSEGV tombstone in `SurfaceComposerClient::getDisplayInfo`, not a Rockbox
+  crash. The launcher now stops/confirms boot animation before SurfaceFlinger,
+  refusing takeover on missing/stuck service state or a remaining process.
+  The new regression failed on the previous script; **69 host tests** then
+  passed without relaxing existing thresholds. A controlled live-animation
+  launch verified `bootanim running` before, `stopped` with no process during
+  takeover, and normal native exit 0. Another ordinary fixed-launcher round trip
+  also passed. Both restored all services and added no new tombstones.
+- **Input evidence limit:** Touch/Power events were injected, not human-operated.
+  Repeated same-coordinate injected Return taps were initially ignored in the
+  live-animation check; changing coordinates then repeating worked. Human
+  first-tap behavior across repeated launches still needs checking.
+
+Original config/playlist hashes and −60 dB volume were restored after tests.
+Disposable media/controller/loader fixtures and the test-created Chopper save
+were removed; backups and device tombstones were retained. Final state: new
+native player/private runtime/launcher installed, boot autostart disabled,
+Rockbox stopped, PCM closed, usable Android home and all four services running.
+No reboot, physical shutdown or firmware/boot-image flash occurred.
+
+USB/ADB stayed connected, battery full/charging. No human analog listening,
+USB-headphone switching, unplugged-battery soak, balanced output/calibration,
+physical card removal/reboot persistence or exhaustive plugin check occurred.
+Private evidence: `local/validation/private-runtime-device-20261011/`.
+
+## User confirmation after private-runtime update — 2026-10-11
+
+After the private-runtime and BootAnimation launcher updates, the user reported:
+**“Everything works, just tested!”** This records a user-operated follow-up on the
+installed player, separate from the earlier injected-input tests.
+
+The report did not specify individual steps, USB-headset model/switching count,
+listening conditions, test duration or battery/thermal measurements. It supports
+normal-use functionality as reported, but does not establish that every pending
+specialized check was performed. The measured heavy-plugin cutoff, plugin-audio
+USB-switching issue and remaining shutdown/balanced-output/battery/storage checks
+stay recorded. No device connection, installation, playback, shutdown or firmware
+change was performed for this documentation update; binaries remain unchanged.

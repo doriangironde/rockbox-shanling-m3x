@@ -7,6 +7,9 @@ release, a replacement firmware image, or a ZIP to flash in recovery/Magisk.
 
 ## Start here
 
+- **Download:** [experimental releases](https://github.com/doriangironde/rockbox-shanling-m3x/releases).
+  Download the installer ZIP and its matching source ZIP; read the release notes
+  and requirements first. GitHub's automatic source downloads are not installers.
 - **Install, update or roll back:** [installation guide](tools/m3x/INSTALL.md).
 - **Build or contribute:** [development tools](tools/m3x/README.md) and the build steps below.
 - **Understand the hardware limits:** [validation record and remaining checks](M3X_OFFLINE_CHECKLIST.md).
@@ -46,12 +49,41 @@ switching working, with normal battery drain and no overheating or other issues
 reported. These are user observations, not a measured battery/thermal soak.
 Physical shutdown was explicitly excluded from that follow-up.
 
+## Private runtime follow-up
+
+Current sources install codecs, plugins, overlays and bundled Lua support files
+under `/data/adb/modules/rockbox_m3x/runtime/`, separate from shared settings and
+music. Native loading checks the root-owned path before `dlopen`; shared native
+plugins are no longer loaded. Updates preserve plugin data and keep old code in
+the rollback snapshot. See the [installation guide](tools/m3x/INSTALL.md) for
+migration, script trust and rollback limits.
+
+Limited device checks on **2026-10-11** passed update/rollback, private native
+loading and rejection of unsafe module fixtures, MP3/48 kHz FLAC playback,
+screen-off lock, Chopper save/relaunch and Android return. A discovered Android
+boot-animation crash led to a launcher stop/confirmation fix; live-animation and
+normal round trips then passed without new tombstones. The native player and
+launcher hashes are recorded in the [validation record](M3X_OFFLINE_CHECKLIST.md).
+
+The heavier plugin sequence reached the 55°C CPU cutoff while Boomshine was
+starting; the guard stopped Rockbox and restored Android. Heavy plugin use still
+needs thermal investigation. USB switching was not repeated on this build, and
+these automated checks do not prove analog sound quality, unplugged battery use
+or exhaustive plugin/input behavior. Earlier rate-sweep results remain tied to
+the earlier build.
+
+After testing the installed private-runtime build, the user reported:
+**“Everything works, just tested!”** This general user confirmation complements
+the automated checks. Individual steps and duration were not specified; it does
+not replace the recorded heavy-plugin thermal limit or specialized pending checks.
+
 ## Install and use
 
-Build an installer as described below, or use a matching installer and source
-archive supplied by the project maintainer. Extract the installer on your
-computer, authorize ADB and Magisk on the M3X, and **return to Android before
-installing or updating**. Inside the extracted directory:
+Download a matching installer/source pair from the
+[experimental releases](https://github.com/doriangironde/rockbox-shanling-m3x/releases),
+or build the installer as described below. Extract the installer on your computer,
+authorize ADB and Magisk on the M3X, and **return to Android before installing or
+updating**. Inside the extracted directory:
 
 ```sh
 python3 install.py check

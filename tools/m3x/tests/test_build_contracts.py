@@ -35,6 +35,15 @@ class BuildContractTests(unittest.TestCase):
         self.assertNotIn("AUDIOHW_HAVE_MONO_VOLUME", macros)
         self.assertNotIn("HAVE_SPECIAL_DIRS", macros)
         self.assertEqual(macros["PIVOT_ROOT"], '"/data/media/0"')
+        self.assertEqual(macros["M3X_RUNTIME_DIR"], '"/.rockbox-runtime"')
+        self.assertEqual(macros["M3X_RUNTIME_ROOT"], '"/data/adb/modules/rockbox_m3x/runtime"')
+        self.assertEqual(macros["PLUGIN_DIR"], 'M3X_RUNTIME_DIR "/rocks"')
+        self.assertEqual(macros["CODECS_DIR"], 'M3X_RUNTIME_DIR "/codecs"')
+        self.assertEqual(macros["PLUGIN_DATA_DIR"], 'ROCKBOX_DIR "/rocks"')
+        simulator = subprocess.check_output(command[:-1] + ['-DSIMULATOR', '-'], input='', text=True)
+        sim_macros = dict(re.findall(r'^#define (\w+)(?: (.*))?$', simulator, re.M))
+        self.assertNotIn('M3X_RUNTIME_ROOT', sim_macros)
+        self.assertEqual(sim_macros['PLUGIN_DIR'], 'ROCKBOX_DIR "/rocks"')
 
     def test_all_modules_have_no_text_relocations_or_executable_stack(self):
         modules = [BUILD / "rockbox"]

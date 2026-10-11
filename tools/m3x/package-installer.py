@@ -91,6 +91,21 @@ def asset_files(path):
     return files
 
 
+def split_assets(assets):
+    """Keep all bundled plugin support files private, data copies writable."""
+    files = {}
+    for name, data in assets.items():
+        relative = PurePosixPath(name).relative_to('.rockbox')
+        if relative.parts[0] in ('codecs', 'rocks'):
+            files['payload/runtime/' + relative.as_posix()] = data
+            # Native modules and bundled Lua code must never be installed in
+            # shared storage. Other plugin assets also have writable data paths.
+            if relative.parts[0] == 'codecs' or relative.suffix in ('.rock', '.ovl', '.lua'):
+                continue
+        files['payload/assets/' + name] = data
+    return files
+
+
 def arm64(path):
     data = path.read_bytes()
     if data[:6] != b'\x7fELF\x02\x01' or struct.unpack_from('<H', data, 18)[0] != 183:
@@ -125,8 +140,7 @@ def main():
             raise ValueError('Invalid launcher APK')
     for name in ('service.sh', 'post-fs-data.sh', 'launch.sh', 'module.prop'):
         files['payload/module/' + name] = (ROOT / 'm3x-module' / name).read_bytes()
-    for name, data in asset_files(BUILD / 'rockbox.zip').items():
-        files['payload/assets/' + name] = data
+    files.update(split_assets(asset_files(BUILD / 'rockbox.zip')))
     manifest = {
         'release': release,
         'source_id': source_id,
@@ -137,6 +151,7 @@ def main():
         'launcher_apk_sha256': digest(files['payload/Rockbox-M3X.apk']),
         'framebuffer_helper_sha256': digest(files['payload/fbpan']),
         'boot_default': 'Android',
+        'runtime_layout': 'private-module-runtime-v1',
     }
     files['manifest.json'] = (json.dumps(manifest, indent=2) + '\n').encode()
     files['SHA256SUMS'] = ''.join(digest(data) + '  ' + name + '\n'

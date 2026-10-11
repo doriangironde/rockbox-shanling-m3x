@@ -26,8 +26,12 @@ with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as z:
     z.writestr("README.txt", """M3X development bundle for a later device test.
 
 rockbox is the native ARM64 executable; rockbox-assets.zip contains its matching
-/.rockbox assets. module/ contains the updated scripts and fbpan helper for
-/data/adb/modules/rockbox_m3x/. Do not put the production helper in shell-writable
+/.rockbox assets in the upstream packaging layout, NOT the native install layout.
+Use the standalone installer to split codecs/ and rocks/ into the private
+/data/adb/modules/rockbox_m3x/runtime/ tree. Do not extract executable modules into
+shared storage: the new loader refuses them. module/ contains the updated scripts
+and fbpan helper for /data/adb/modules/rockbox_m3x/.
+Do not put the production helper in shell-writable
 /data/local/tmp. Run collect-state.sh as root to gather diagnostics.
 
 This is a manual development update bundle, not a Magisk installer. Preserve the

@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[3]
 class ServiceTests(unittest.TestCase):
     def run_service(self, cpu="35", battery="25000", disabled=False, later=None,
                     runtime_state="stopped", display_state="stopped", child_exit=0,
-                    already_running=False):
+                    already_running=False, bootanim_state="stopped", bootanimation_running=False):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
             mod = base / "module"
@@ -47,8 +47,10 @@ class ServiceTests(unittest.TestCase):
                 pidof_script = 'case "$1" in rockbox) echo 1234; exit 0;; esac\nexit 1\n'
             else:
                 pidof_script = "exit 1\n"
+            if bootanimation_running:
+                pidof_script = 'if [ "$1" = bootanimation ]; then echo 5678; exit 0; fi\n' + pidof_script
             executable(commands / "pidof", pidof_script)
-            executable(commands / "getprop", f'case "$1" in init.svc.surfaceflinger) echo {display_state};; *) echo {runtime_state};; esac\n')
+            executable(commands / "getprop", f'case "$1" in init.svc.surfaceflinger) echo {display_state};; init.svc.bootanim) echo {bootanim_state};; *) echo {runtime_state};; esac\n')
             # Accelerate launcher waits while keeping the real monitor/child race.
             executable(commands / "sleep", '/bin/sleep 0.02\n')
             # Leave ample time for the monitor under parallel compiler load.
@@ -115,6 +117,19 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual((brightness, unlock), ("123", "rockbox"))
         self.assertIn("start surfaceflinger", calls)
 
+    def test_bootanimation_stop_failure_refuses_display_takeover(self):
+        for failure in ({"bootanim_state": "running"}, {"bootanimation_running": True},
+                        {"bootanim_state": ""}):
+            with self.subTest(failure=failure):
+                calls, log, disabled, brightness, unlock = self.run_service(**failure)
+                self.assertNotIn("launch", calls)
+                self.assertNotIn("stop surfaceflinger", calls)
+                self.assertIn("BootAnimation did not stop", log)
+                self.assertTrue(disabled)
+                self.assertEqual((brightness, unlock), ("123", "rockbox"))
+                self.assertIn("start surfaceflinger", calls)
+                self.assertIn("start zygote_secondary", calls)
+
     def test_crash_status_restores_android_without_respawn(self):
         calls, log, disabled, brightness, unlock = self.run_service(child_exit=139)
         self.assertEqual(calls.count("launch"), 1)
@@ -128,7 +143,8 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(calls.count("launch"), 1)
         self.assertIn("fbpan --pan 0", calls)
         self.assertIn("start surfaceflinger", calls)
-        self.assertLess(calls.index("stop zygote"), calls.index("stop surfaceflinger"))
+        self.assertLess(calls.index("stop zygote"), calls.index("stop bootanim"))
+        self.assertLess(calls.index("stop bootanim"), calls.index("stop surfaceflinger"))
         self.assertLess(calls.index("start surfaceflinger"), calls.index("start zygote"))
         self.assertTrue(disabled)
         self.assertEqual((brightness, unlock), ("123", "rockbox"))

@@ -99,6 +99,20 @@ if [ "$(getprop init.svc.zygote)" != stopped ] ||
     exit 1
 fi
 
+# BootAnimation is another SurfaceFlinger client. A live animation can crash
+# in getDisplayInfo when its display token disappears during takeover.
+# Stop and confirm it before releasing the compositor; fail closed on a race.
+stop bootanim
+for attempt in 1 2 3 4 5; do
+    [ "$(getprop init.svc.bootanim)" = stopped ] &&
+        ! pidof bootanimation >/dev/null && break
+    sleep 1
+done
+if [ "$(getprop init.svc.bootanim)" != stopped ] || pidof bootanimation >/dev/null; then
+    log "BootAnimation did not stop; refusing display takeover"
+    exit 1
+fi
+
 # SurfaceFlinger must exit to release its overlay pipes.
 stop surfaceflinger
 for attempt in 1 2 3 4 5; do

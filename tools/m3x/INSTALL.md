@@ -14,8 +14,20 @@ the installer when distributing it. This is an independent development release.
 
 Only run a bundle from a trusted source. Checksums detect corruption; they do
 not authenticate a replaced installer and manifest. The native player runs as
-root and loads modules from shared `.rockbox` storage: do not grant untrusted
-Android apps storage-write access on this development setup.
+root. Codecs, plugins, overlays and bundled Lua support files now live in the
+root-owned `/data/adb/modules/rockbox_m3x/runtime/` tree, not shared `.rockbox`
+storage. Native loading rejects paths outside that tree, symlinks, non-root
+ownership and group/other-writable files or directories before `dlopen`.
+
+This is not a sandbox or a complete security audit. Lua can still execute scripts
+selected from writable storage with the root player's API; only run trusted
+scripts. Settings, playlists, themes and music also remain writable input. Keep
+untrusted apps off this rooted development setup. Limited firmware-1.75 device
+checks passed update/rollback, private loading, MP3/48 kHz FLAC playback, screen
+lock, Chopper save/relaunch and Android return. Broader plugin coverage is not
+implied: the heavy plugin sequence hit the 55°C CPU cutoff while Boomshine was
+starting, and the guard restored Android. USB switching, analog listening and
+unplugged battery use were not repeated for this build.
 
 The production helper now lives at `/data/adb/modules/rockbox_m3x/fbpan`; launch
 logs live under `/data/adb/rockbox-m3x-manual/`. Updates migrate the old temporary
@@ -38,9 +50,16 @@ a private backup, installs the complete bundle and prints its backup path and
 rollback command. Save that output. With several ADB devices, use `--serial`;
 with ADB outside PATH, use `--adb /absolute/path/to/adb`.
 
-Existing Rockbox settings, saved playlists and custom assets are preserved by
-overlaying the new matching files onto a staged copy. Music directories are
-left in place. A new installation starts quietly at -60 dB with resume disabled.
+Existing Rockbox settings, saved playlists and custom data assets are preserved
+by overlaying new matching files onto a staged copy. Music directories stay in
+place. Runtime is rebuilt only from the verified bundle; old native `.codec`,
+`.rock` and `.ovl` files under shared `codecs/` and `rocks/` are removed from the
+active installation, but retained in the private backup. Custom native plugins
+must be rebuilt and packaged with the matching player, not copied into shared
+storage. Plugin data keeps its existing `.rockbox/rocks/` paths. Saved shortcuts
+to old plugin paths may need reselecting. Shared asset symlinks are rejected to
+avoid root copies through writable links; move them aside before installing.
+A new installation starts quietly at -60 dB with resume disabled.
 An ordinary install error triggers automatic snapshot restoration. If power or
 USB is lost mid-install, reconnect with Android running and use the retained
 snapshot to restore. Backups are not deleted automatically.
@@ -59,7 +78,10 @@ python3 install.py rollback --backup dev-BUILD.SNAPSHOT
 ```
 
 The snapshot includes the previous native player, all `.rockbox` assets/settings,
-module scripts, framebuffer helper and launcher APK. Rollback restores those
+module scripts (including private runtime, when present), framebuffer helper and
+launcher APK. Restoring an older snapshot restores its older shared-code layout
+and its corresponding loader; it does not retain the new security checks.
+Rollback restores those
 settings as they were when the backup was made. Music is left in place and boot
 autostart remains disabled. A first-install rollback removes newly installed
 components. Keep the backup until you are satisfied with the update.
