@@ -107,6 +107,11 @@ STATUS='''%V(24,12,200,36,2)%Vf(202020)%Vb(ECECEC)
 Rockbox
 %V(626,12,112,36,2)%Vf(202020)%Vb(ECECEC)
 %ar%bl%%
+%V(224,4,384,48,2)%Vf(202020)%Vb(ECECEC)
+%?mv(3)<%acVolume: %pv|>
+%?mv(3)<%Vd(volume)>
+%Vl(volume,248,42,336,10,2)%Vf(2B6AB1)%Vb(CBCBCB)
+%pv(0,0,336,8)
 '''
 SBS='''# Full-screen M3X iPod-style menu; original artwork, no click wheel.
 %X(screen.bmp)

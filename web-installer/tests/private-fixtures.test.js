@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { applyAudioFix, equal, fdtProperties, parseBoot, validateStock, validateStockPartition } from '../src/images.js';
+import { zipSync } from 'fflate';
+import { applyAudioFix, equal, fdtProperties, parseBoot, stockBootFile, validateStock, validateStockPartition } from '../src/images.js';
 import { installerBundle } from '../src/bundle.js';
 import { PROFILE, sha256 } from '../src/profile.js';
 const base = fileURLToPath(new URL('../../', import.meta.url));
@@ -11,6 +12,19 @@ const magiskPath = base + 'local/backups/magisk_patched-30700_25tcf.img';
 const referencePath = base + 'local/firmware/m3x_v1_75/boot-magisk-dtb.img';
 const bundlePath = base + 'build-m3x/release/Rockbox-M3X-dev-bf6af2444b56-installer.zip';
 const read = path => new Uint8Array(readFileSync(path));
+
+test('private stock fixture authenticates direct boot and streamed root boot from stored/deflated ZIPs',
+  { skip: !existsSync(stockPath) && 'Private boot images are not distributed' }, async () => {
+    const stock = read(stockPath);
+    assert(equal(await stockBootFile(new Blob([stock])), stock));
+    for (const level of [0, 6]) {
+      const archive = zipSync({ 'system.img': new Uint8Array(4096), 'boot.img': stock }, { level });
+      if (level) archive[30 + 'system.img'.length] = 0x07;
+      assert(equal(await stockBootFile(new Blob([archive])), stock));
+    }
+    const corrupted = stock.slice(); corrupted[2048] ^= 1;
+    await assert.rejects(stockBootFile(new Blob([corrupted])), /exact stock/);
+  });
 
 test('private stock/Magisk fixtures: same GPIO property fix as hardware-tested dtc image',
   { skip: ![stockPath, magiskPath, referencePath].every(existsSync) && 'Private boot images are not distributed' }, async () => {

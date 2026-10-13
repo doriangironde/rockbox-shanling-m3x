@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' ws://127.0.0.1:* ws://localhost:*; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' https://raw.githubusercontent.com ws://127.0.0.1:* ws://localhost:*; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="color-scheme" content="light dark">
   <meta name="description" content="Experimental WebUSB installer for Rockbox on Shanling M3X. Firmware 1.75 only. Browser boot flashing is disabled pending hardware and recovery validation.">
@@ -26,51 +26,116 @@
 </header>
 <main id="web-install">
   <h1><a href="#web-install">Install Rockbox</a></h1>
-  <p>Install or update Rockbox on your Shanling M3X.</p>
-  <p class="warning-text"><strong>Experimental: browser installation is not hardware-tested.</strong>
-    Back up your music and settings first. Prefer the
-    <a href="https://github.com/doriangironde/rockbox-shanling-m3x/blob/main/tools/m3x/INSTALL.md" target="_blank" rel="noopener noreferrer">tested command-line installer</a> if unsure.</p>
+  <p>From stock Shanling M3X to root, then Rockbox. Firmware <strong>1.75 / Android 7.1.1 only.</strong></p>
+  <p id="write-policy" class="warning-text">Experimental: boot writes are disabled until unrooted rooting and recovery without Android are hardware-validated.</p>
+  <p><strong>Already rooted with the GPIO18/19 audio fix?</strong> Select the installer, connect, then
+    <a href="#obtaining-release">skip rooting and install Rockbox</a>. Do not re-root a working player.</p>
 
   <section id="prerequisites">
-    <h2><a href="#prerequisites">1. Prepare your player</a></h2>
-    <ul>
-      <li><strong>Shanling M3X only, firmware 1.75 / Android 7.1.1.</strong></li>
-      <li>Magisk root and the GPIO18/19 audio fix already installed.</li>
-      <li>Battery at least 50%. Return to Android and stop Rockbox.</li>
-      <li>Enable USB debugging. Use desktop Chrome or Edge and a data-capable USB cable.</li>
-    </ul>
-    <p><strong>Not rooted? This page cannot install root yet.</strong> Do not re-root a working player.</p>
+    <h2><a href="#prerequisites">1. Get the required files</a></h2>
+    <p>Back up music and settings, charge to at least 50%, and return to Android with Rockbox stopped.
+      Use desktop Chrome or Edge, USB debugging and a data-capable cable.</p>
+    <p class="supporting-text">Files are checked and processed locally, never uploaded. Rooting needs all four files;
+      an already-rooted player only needs the installer ZIP.</p>
+    <label for="installer-file">Rockbox installer ZIP</label>
+    <p class="file-help"><a id="release-link" target="_blank" rel="noopener noreferrer">Download the installer ZIP</a>.</p>
+    <input id="installer-file" type="file" accept=".zip" aria-describedby="release-verification">
+    <p id="release-verification" class="supporting-text">The ZIP and player are checked before installation.</p>
+
+    <label for="stock-file">Stock firmware 1.75 ZIP or boot.img</label>
+    <p id="stock-help" class="file-help"><a href="https://drive.google.com/file/d/16gKNmTPn82JyCrLtY2zRYHSZtxKfp6sT/view?usp=drive_link" target="_blank" rel="noopener noreferrer">Download OEM firmware 1.75</a>
+      (<a href="https://en.shanling.com/download/77" target="_blank" rel="noopener noreferrer">Shanling download page</a>).
+      Select the ZIP; boot.img is extracted and verified on this computer.</p>
+    <div class="file-actions">
+      <input id="stock-file" type="file" accept=".zip,.img" aria-describedby="stock-help stock-status">
+      <button id="extract-boot" disabled>Save stock boot.img</button>
+    </div>
+    <p id="stock-status" class="supporting-text" role="status" aria-live="polite">No stock firmware selected.</p>
+
+    <label for="magisk-file">Official Magisk-v30.7.apk</label>
+    <p class="file-help"><a href="https://github.com/topjohnwu/Magisk/releases/download/v30.7/Magisk-v30.7.apk" target="_blank" rel="noopener noreferrer">Download Magisk 30.7 APK</a>.</p>
+    <input id="magisk-file" type="file" accept=".apk">
+
+    <label for="programmer-file">Verified MSM8937.mbn programmer</label>
+    <p id="programmer-help" class="file-help">Click <strong>Get programmer</strong> to select the verified file automatically, or select your offline copy.</p>
+    <div class="file-actions">
+      <input id="programmer-file" type="file" accept=".mbn" aria-describedby="programmer-help">
+      <button id="get-programmer" disabled>Get programmer</button>
+    </div>
   </section>
   <section id="connecting-device">
-    <h2><a href="#connecting-device">2. Connect your player</a></h2>
-    <p>Plug the M3X directly into your computer. Click <strong>Connect M3X</strong> and select it.
-      On the player, allow USB debugging and Magisk root access when prompted.</p>
+    <h2><a href="#connecting-device">2. Connect and check your M3X</a></h2>
+    <p>Plug only this M3X directly into your computer. Click <strong>Connect M3X</strong> and select it.
+      On the player, allow USB debugging and, if already rooted, Magisk root access.</p>
     <p id="compatibility" class="supporting-text" role="status"></p>
     <div class="actions"><button id="connect">Connect M3X</button><button id="disconnect" disabled>Disconnect</button></div>
     <p id="device-status" class="device-status" role="status">No player connected.</p>
   </section>
   <div id="session-status" class="session-status">
-    <p id="operation-status" role="status" aria-live="polite">Ready. Connect your player to start.</p>
+    <p id="operation-status" role="status" aria-live="polite">Ready. Select your files and connect your player.</p>
     <progress id="progress" max="1" value="0" aria-label="Current operation progress"></progress>
   </div>
-  <section id="obtaining-release">
-    <h2><a href="#obtaining-release">3. Select and verify the installer</a></h2>
-    <p><a id="release-link" target="_blank" rel="noopener noreferrer">Download the installer ZIP</a>
-      from the release attachments, not “Source code”. Select it below, then click <strong>Verify installer</strong>.</p>
-    <label for="installer-file">Installer ZIP</label><input id="installer-file" type="file" accept=".zip" aria-describedby="release-verification">
-    <p id="release-verification" class="supporting-text">The ZIP and player are checked before installation. Files stay local.</p>
-    <button id="check-install" disabled>Verify installer</button>
+  <section id="preparing-root">
+    <h2><a href="#preparing-root">3. Prepare the root image, if needed</a></h2>
+    <p>Unrooted M3X only. Installs Magisk manager and prepares a boot image with root and the required audio fix.</p>
+    <label class="consent"><input id="prepare-consent" type="checkbox"> Install Magisk manager and patch temporary files on this unrooted M3X.</label>
+    <div class="actions"><button id="prepare-root" disabled>Prepare root image</button><button id="save-image" disabled>Save prepared boot image</button></div>
+    <p class="warning-text">This patching method is untested on an unrooted player. Saving an image does not install root or prove it will boot.</p>
+    <p class="supporting-text">M3X fastboot cannot flash, boot or reboot. Do not use OEM-unlock, factory-reset or generic fastboot recipes.</p>
   </section>
-  <section id="installing-rockbox">
-    <h2><a href="#installing-rockbox">4. Install Rockbox</a></h2>
-    <p>Confirm your backup, then click <strong>Install Rockbox</strong>.
-      <strong>Keep this tab open and the USB cable connected until completion.</strong></p>
-    <p class="supporting-text">Updates keep music and settings and create a rollback snapshot. No firmware is flashed.</p>
-    <label class="consent"><input id="install-consent" type="checkbox"> I backed up my data and want to install/update Rockbox.</label>
-    <button id="install" disabled>Install Rockbox</button>
+  <section id="edl-backup">
+    <h2><a href="#edl-backup">4. Reboot to EDL and save a boot backup</a></h2>
+    <p>Have the <a href="./recovery.html">native recovery setup</a> and files ready first.
+      Select <strong>QHSUSB__BULK (Qualcomm)</strong> in Chrome’s USB chooser.</p>
+    <label class="consent"><input id="edl-consent" type="checkbox"> Reboot this player into EDL. I have the
+      <a href="./recovery.html" target="_blank" rel="noopener noreferrer">native recovery guide</a> and files ready.</label>
+    <div class="actions"><button id="enter-edl" disabled>Reboot to EDL for prepared image</button><button id="connect-edl" disabled>Connect EDL + inspect / back up</button></div>
+    <h3 id="saving-backup"><a href="#saving-backup">Save and verify your backup</a></h3>
+    <p>Save <strong>both</strong> the full 64 MiB boot backup and recovery JSON. Keep the JSON private: it contains device identity.
+      Reopen the saved backup below and verify it.</p>
+    <button id="save-backup" disabled>Save boot backup + recovery record</button>
+    <label for="backup-file">Saved boot backup</label><input id="backup-file" type="file" accept=".bin">
+    <button id="verify-backup" disabled>Verify saved backup</button>
+    <p class="supporting-text">Device identity, programmer and disk layout are checked. Root installation requires stock 1.75 boot;
+      <a href="#read-only-diagnostics">read-only diagnostics</a> can also save an already-rooted boot image.</p>
+  </section>
+  <section id="boot-flash">
+    <h2><a href="#boot-flash">5. Install root — boot writes disabled</a></h2>
+    <p class="warning-text"><strong>A failed boot flash can prevent booting or lose data.</strong>
+      Rooting weakens Android security. A boot backup does not include music or settings.</p>
+    <p>Root installation requires the prepared image, a reopened and verified saved backup, the typed phrase and risk consent.
+      These safeguards do not enable writes in this build.</p>
+    <p id="flash-phrase">Prepare and verify a saved backup first.</p>
+    <label for="flash-confirmation">Type the displayed flash phrase</label><input id="flash-confirmation" type="text" autocomplete="off" spellcheck="false">
+    <label class="consent"><input id="flash-risk" type="checkbox"> I accept boot/security risks and have a verified saved recovery backup.</label>
+    <button id="flash" disabled>Flash verified root boot image</button>
+    <p class="warning-text">EDL entry without a booting Android system is not validated. <code>adb reboot edl</code>
+      cannot recover a player that no longer boots Android.</p>
+    <p class="supporting-text">Only boot can be written; full readback must match. No erase, unlock, other partition writes or automatic reboot.
+      <strong>Never disconnect, close the tab or power off during a write.</strong></p>
+  </section>
+  <section id="confirming-root">
+    <h2><a href="#confirming-root">6. Reconnect and confirm root</a></h2>
+    <p>After a developer flash, manually return to Android and finish Magisk setup.
+      <a href="#connecting-device">Connect M3X again</a>, allow Magisk root access and confirm the player reports root available.
+      Verify the GPIO18/19 audio fix before continuing: readback alone does not prove bootability.</p>
+    <p class="supporting-text">Already rooted and connected? Keep the connection and continue below.</p>
+  </section>
+  <section id="obtaining-release">
+    <h2><a href="#obtaining-release">7. Verify and install Rockbox</a></h2>
+    <p>With root confirmed and the <a href="#installer-file">installer ZIP selected</a>, click <strong>Verify installer</strong>.</p>
+    <button id="check-install" disabled>Verify installer</button>
+    <section id="installing-rockbox">
+      <h3><a href="#installing-rockbox">Install Rockbox</a></h3>
+      <p>Confirm your data backup, then click <strong>Install Rockbox</strong>.
+        <strong>Keep this tab open and the USB cable connected until completion.</strong></p>
+      <p class="supporting-text">Updates keep music and settings and create a rollback snapshot. No firmware is flashed.</p>
+      <label class="consent"><input id="install-consent" type="checkbox"> I backed up my data and want to install/update Rockbox.</label>
+      <button id="install" disabled>Install Rockbox</button>
+    </section>
   </section>
   <section id="post-installation">
-    <h2><a href="#post-installation">5. Open Rockbox</a></h2>
+    <h2><a href="#post-installation">8. Open Rockbox</a></h2>
     <ul>
       <li>Wait for “completed”. Save the backup path from the <a href="#operation-log">operation log</a> for rollback.</li>
       <li>Open <strong>Rockbox</strong> in Android. Start at low volume.</li>
@@ -80,91 +145,48 @@
     <p class="supporting-text">Run only trusted plugins and Lua scripts; root access is not a sandbox.</p>
   </section>
 
-  <details>
-    <summary>Connection help</summary>
+  <section id="connection-help" class="secondary-tools">
+    <h2><a href="#connection-help">Connection help</a></h2>
     <ul>
       <li>Use Chrome or Edge over HTTPS or localhost. Safari and Firefox cannot connect over USB.</li>
       <li>Stop desktop ADB if it owns the USB connection. Avoid hubs and virtual machines.</li>
       <li>Linux may need USB permissions; Windows may need a compatible driver. Do not replace drivers blindly.</li>
       <li>Reloading or disconnecting forgets the browser key; authorize the player again.</li>
     </ul>
-    <p>If connection fails, use the <a href="https://github.com/doriangironde/rockbox-shanling-m3x/blob/main/tools/m3x/INSTALL.md" target="_blank" rel="noopener noreferrer">command-line installer</a>.
+    <p>If connection fails or you are unsure, use the <a href="https://github.com/doriangironde/rockbox-shanling-m3x/blob/main/tools/m3x/INSTALL.md" target="_blank" rel="noopener noreferrer">tested command-line installer</a>.
       Browser/OS driver compatibility is not yet validated on the M3X.</p>
-  </details>
-  <details id="rollback-tools">
-    <summary>Restore a previous Rockbox installation</summary>
-    <section id="restoring-installation">
-      <h2><a href="#restoring-installation">Restore a snapshot</a></h2>
-      <p>Connect your rooted player, enter the snapshot name saved from the log, then click <strong>Restore Rockbox snapshot</strong>.</p>
-      <p class="warning-text">This restores old settings, loader and security limits. It does not restore firmware.</p>
-      <label for="rollback-name">Rollback snapshot name</label>
-      <input id="rollback-name" type="text" placeholder="dev-xxxxxxxxxxxx.XXXXXX" autocomplete="off">
-      <button id="rollback" disabled>Restore Rockbox snapshot</button>
-    </section>
-  </details>
-  <details id="developer-tools">
-    <summary>Developer tools: root preparation &amp; EDL — experimental</summary>
-    <p id="write-policy" class="warning-text">Boot-partition writes are disabled. Browser flashing and recovery are not hardware-validated.</p>
-    <p class="warning-text"><strong>A failed boot flash can prevent booting or lose data.</strong>
-      Rooting weakens Android security. A boot backup does not include music or settings;
-      keep a separate data backup and a working <a href="./recovery.html">native recovery setup</a>.</p>
-    <section id="preparing-root">
-      <h2><a href="#preparing-root">Prepare a root image</a></h2>
-      <p>For development on an unrooted M3X only. M3X fastboot cannot flash, boot or reboot:
-        <strong>do not use OEM-unlock, factory-reset or generic fastboot recipes.</strong></p>
-      <p>Select your stock firmware 1.75 <code>boot.img</code>,
-        the official <a href="https://github.com/topjohnwu/Magisk/releases/tag/v30.7" target="_blank" rel="noopener noreferrer">Magisk 30.7 APK</a>
-        and the verified MSM8937 programmer. These files are not supplied or uploaded.</p>
-      <label for="stock-file">Stock boot.img <span class="inline-note">(26,576,168 bytes)</span></label>
-      <input id="stock-file" type="file" accept=".img,.bin">
-      <label for="magisk-file">Official Magisk-v30.7.apk</label><input id="magisk-file" type="file" accept=".apk">
-      <label for="programmer-file">Verified MSM8937.mbn</label><input id="programmer-file" type="file" accept=".mbn">
-      <label class="consent"><input id="prepare-consent" type="checkbox"> Install Magisk manager and patch temporary files on this unrooted M3X.</label>
-      <div class="actions"><button id="prepare-root" disabled>Prepare root + GPIO18/19 fix</button><button id="save-image" disabled>Save prepared boot image</button></div>
-      <p class="warning-text">Prepared images and this patching method are untested on an unrooted player.
-        Saving an image does not install root or prove it will boot.</p>
-    </section>
-    <section id="edl-backup">
-      <h2><a href="#edl-backup">Connect EDL and back up boot</a></h2>
-      <p>Rebooting enters Qualcomm EDL, not fastboot. Re-authorize USB for <code>05c6:9008</code>.
-        Connect only this M3X; have recovery files ready before rebooting.</p>
-      <label class="consent"><input id="edl-consent" type="checkbox"> Reboot this player into EDL. I have the
-        <a href="./recovery.html" target="_blank" rel="noopener noreferrer">native recovery guide</a> and files ready.</label>
-      <div class="actions"><button id="enter-edl" disabled>Reboot to EDL for prepared image</button><button id="connect-edl" disabled>Connect EDL + inspect / back up</button></div>
+  </section>
+  <section id="developer-tools" class="secondary-tools">
+    <h2><a href="#developer-tools">Recovery and tools</a></h2>
+    <section aria-labelledby="read-only-diagnostics">
       <h3 id="read-only-diagnostics"><a href="#read-only-diagnostics">Read-only diagnostics</a></h3>
-      <p>Already rooted? Select the programmer above and use this path instead.
-        It runs the programmer in RAM and reads boot, without partition writes or flash authorization.</p>
+      <p>Select the <a href="#programmer-file">programmer</a> and connect your player, then give
+        <a href="#edl-consent">EDL consent in step 4</a>. This runs the programmer in RAM and reads GPT and boot,
+        without partition writes or flash authorization.</p>
       <div class="actions"><button id="diagnostic-reboot" disabled>Reboot to EDL for read-only diagnostics</button><button id="diagnostic-read" disabled>Read GPT + boot backup</button></div>
-      <h3 id="saving-backup"><a href="#saving-backup">Save and verify your backup</a></h3>
-      <p>Save <strong>both</strong> the full 64 MiB boot backup and recovery JSON. Keep the JSON private: it contains device identity.
-        Reopen the saved backup below and verify it.</p>
-      <button id="save-backup" disabled>Save boot backup + recovery record</button>
-      <label for="backup-file">Saved boot backup</label><input id="backup-file" type="file" accept=".bin">
-      <button id="verify-backup" disabled>Verify saved backup</button>
-      <p class="supporting-text">Device identity, programmer and disk layout are checked.
-        Root installation also requires stock 1.75 boot; diagnostics can back up an already-rooted boot image.</p>
+      <p class="supporting-text">After reading, <a href="#saving-backup">save and verify the backup in step 4</a>. Already-rooted boot images are supported.</p>
     </section>
-    <section id="boot-flash">
-      <h2><a href="#boot-flash">Boot flash and restore — disabled</a></h2>
-      <p class="warning-text">EDL entry without a booting Android system is <strong>not validated</strong>.
-        <code>adb reboot edl</code> cannot recover a player that no longer boots Android.</p>
-      <p>Only boot can be written; full readback must match. No erase, unlock, other partition writes or automatic reboot.
-        <strong>Never disconnect, close the tab or power off during a write.</strong></p>
-      <p id="flash-phrase">Prepare and verify a saved backup first.</p>
-      <label for="flash-confirmation">Type the displayed flash phrase</label><input id="flash-confirmation" type="text" autocomplete="off" spellcheck="false">
-      <label class="consent"><input id="flash-risk" type="checkbox"> I accept boot/security risks and have a verified saved recovery backup.</label>
-      <button id="flash" disabled>Flash verified root boot image</button>
-      <h3 id="restoring-boot"><a href="#restoring-boot">Restore the boot backup</a></h3>
+    <section id="restoring-boot">
+      <h3><a href="#restoring-boot">Restore the boot backup — disabled</a></h3>
+      <p>Uses the saved and verified original boot backup, with a separate confirmation and consent.</p>
       <p id="restore-phrase"></p>
       <label for="restore-confirmation">Separate restore phrase</label><input id="restore-confirmation" type="text" autocomplete="off" spellcheck="false">
       <label class="consent"><input id="restore-risk" type="checkbox"> Restore original boot; remove the newly installed root/audio fix.</label>
       <button id="restore-boot" disabled>Restore original boot backup</button>
-      <p class="warning-text">After failure, stay in EDL and use native recovery. No automatic retry.
+      <p class="warning-text">After failure, stay in EDL and use <a href="./recovery.html">native recovery</a>. No automatic retry.
         Recovery after closing this tab is not implemented.</p>
-      <p>Readback does not prove bootability. After a developer flash, return to Android,
-        finish Magisk setup and verify root and audio before installing Rockbox.</p>
     </section>
-  </details>
+    <section id="rollback-tools">
+      <section id="restoring-installation">
+        <h3><a href="#restoring-installation">Restore a previous Rockbox installation</a></h3>
+        <p>Connect your rooted player, enter the snapshot name saved from the log, then click <strong>Restore Rockbox snapshot</strong>.</p>
+        <p class="warning-text">This restores old settings, loader and security limits. It does not restore firmware.</p>
+        <label for="rollback-name">Rollback snapshot name</label>
+        <input id="rollback-name" type="text" placeholder="dev-xxxxxxxxxxxx.XXXXXX" autocomplete="off">
+        <button id="rollback" disabled>Restore Rockbox snapshot</button>
+      </section>
+    </section>
+  </section>
   <section id="operation-log">
     <h2><a href="#operation-log">Operation log</a></h2>
     <p class="supporting-text">Local output. Save the backup path for rollback.</p>

@@ -9,6 +9,20 @@ static void screenshot(void)
     SDL_PushEvent(&event); SDL_Delay(100);
     event.type = SDL_KEYUP; SDL_PushEvent(&event);
 }
+static void key(SDL_Keycode code)
+{
+    SDL_Event event = {0};
+    event.type = SDL_KEYDOWN; event.key.keysym.sym = code;
+    SDL_PushEvent(&event); SDL_Delay(100);
+    event.type = SDL_KEYUP; SDL_PushEvent(&event);
+    SDL_Delay(500);
+}
+static void volume_feedback(void)
+{
+    key(SDLK_EQUALS); screenshot();
+    key(SDLK_MINUS); screenshot();
+    SDL_Delay(3300); screenshot();
+}
 static void click(int x, int y)
 {
     SDL_Event event = {0};
@@ -18,6 +32,26 @@ static void click(int x, int y)
     SDL_PushEvent(&event); SDL_Delay(100);
     event.type = SDL_MOUSEBUTTONUP; SDL_PushEvent(&event);
     SDL_Delay(700);
+}
+static void drag(int x0, int y0, int x1, int y1)
+{
+    SDL_Event event = {0};
+    event.type = SDL_MOUSEBUTTONDOWN;
+    event.button.button = SDL_BUTTON_LEFT;
+    event.button.x = x0; event.button.y = y0;
+    SDL_PushEvent(&event); SDL_Delay(100);
+    for (int step = 1; step <= 12; ++step)
+    {
+        event.type = SDL_MOUSEMOTION;
+        event.motion.state = SDL_BUTTON_LMASK;
+        event.motion.x = x0 + (x1 - x0) * step / 12;
+        event.motion.y = y0 + (y1 - y0) * step / 12;
+        SDL_PushEvent(&event); SDL_Delay(20);
+    }
+    event.type = SDL_MOUSEBUTTONUP;
+    event.button.button = SDL_BUTTON_LEFT;
+    event.button.x = x1; event.button.y = y1;
+    SDL_PushEvent(&event); SDL_Delay(700);
 }
 static void swipe_up(void)
 {
@@ -46,17 +80,43 @@ static void *run(void *unused)
     screenshot();
     SDL_Delay(1000);
     if (getenv("M3X_SMOKE_IPOD")) {
+        volume_feedback();
         click(200, 500); /* Settings, fourth full-screen menu row. */
         screenshot();
+        click(200, 188); /* Brightness shortcut. */
+        screenshot();
+        drag(384, 426, 730, 426); /* Full brightness, clamped at the edge. */
+        screenshot();
+        drag(704, 426, 10, 426);  /* Minimum stays visible, not screen-off. */
+        screenshot();
+        drag(64, 426, 576, 1141); /* Releasing a slider drag over Apply must not accept. */
+        screenshot();
+        click(192, 1141); /* Cancel restores the original level. */
+        click(200, 188);
+        screenshot();
+        drag(64, 426, 384, 426);  /* Midpoint: 130/255. */
+        click(576, 693); /* One fine step up. */
+        screenshot();
+        click(192, 693); /* One fine step down. */
+        screenshot();
+        click(576, 1141); /* Apply and save. */
+        screenshot();
+        click(200, 188); /* Reopen the saved level. */
+        screenshot();
+        click(192, 1141);
         click(80, 96);   /* Back to the main menu. */
         click(200, 188); /* Files. */
         click(200, 188); /* Music folder. */
         screenshot();
         swipe_up();
         screenshot();
+        for (int swipe = 0; swipe < 3; ++swipe)
+            drag(384, 1050, 384, 200);
+        screenshot();
         click(200, 188); /* A song in the scrolled list. */
         SDL_Delay(3000);
         screenshot();
+        volume_feedback();
         click(384, 1128); /* Pause. */
         screenshot();
         click(384, 1128); /* Resume. */

@@ -32,15 +32,18 @@ binaries are not linked/shipped by this site.
   memory and stages them on the user's own device. No modified/pre-rooted APK or
   Magisk binary is redistributed here. Source:
   https://github.com/topjohnwu/Magisk/tree/v30.7
-- **Shanling M3X 1.75 stock boot image / firmware:** supplied from the user's
-  firmware copy. OEM binary firmware and generated rooted boot images are not
-  part of public source/site or Rockbox installer ZIPs.
-- **Qualcomm MSM8937 Firehose programmer:** the port's local verified file
-  originally came from `thantoeaungat/firehose`. Its redistribution rights and
-  precise upstream provenance are unresolved; **do not mirror/package it** merely
-  because it appeared in a public repository. The browser pins the known working
-  bytes' SHA-256 but that does not grant redistribution rights or establish that
-  the programmer itself is a sandbox.
+- **Shanling M3X 1.75 stock boot image / firmware:** downloaded from the OEM:
+  https://en.shanling.com/download/77
+  The browser extracts and authenticates `boot.img` from the user's firmware ZIP.
+  OEM firmware and generated rooted boot images are not part of public source/site
+  or Rockbox installer ZIPs.
+- **Qualcomm MSM8937 Firehose programmer:** **Get programmer** downloads directly
+  from its pinned original upstream, only after an explicit click:
+  https://github.com/thantoeaungat/firehose/blob/56bd8a3d54f9dc69ddf59ee486c557b8cb25cd05/Dongle%20Firehose/Qcom/BOOT/MSM8937.mbn
+  The file's exact size and SHA-256 match the port's working local copy. Its
+  redistribution rights remain unresolved: **do not mirror/package it** merely
+  because it appeared in a public repository. A hash does not grant redistribution
+  rights or establish that the programmer itself is a sandbox.
 
 Profile hashes are public metadata, not included firmware/programmer bytes.
 Private recovery backups, signing identity, device captures, ADB credentials and

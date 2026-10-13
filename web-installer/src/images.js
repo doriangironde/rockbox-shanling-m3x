@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-import { gunzipSync } from 'fflate';
+import { gunzipSync, Unzip, UnzipInflate, UnzipPassThrough } from 'fflate';
 import { PROFILE, requireCondition as check, sha256 } from './profile.js';
 
 const text = new TextDecoder('utf-8', { fatal: true });
@@ -24,6 +24,62 @@ export async function validateStock(bytes) {
   check(bytes.length === PROFILE.stockSize && await sha256(bytes) === PROFILE.stockSha256,
     'Requires the exact stock M3X 1.75 boot.img; do not use another firmware or a pre-patched image');
   return parseBoot(bytes);
+}
+
+export async function stockBootFile(file) {
+  const signature = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+  if (!equal(signature, new Uint8Array([0x50, 0x4b, 0x03, 0x04]))) {
+    check(file.size === PROFILE.stockSize, 'Requires the exact stock M3X 1.75 boot.img or official firmware ZIP');
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    await validateStock(bytes);
+    return bytes;
+  }
+  let bytes, length = 0, complete = false;
+  const unzip = new Unzip(entry => {
+    if (entry.name !== 'boot.img') {
+      // fflate retains unstarted entries; discard compressed bytes without inflating them.
+      unzip.register(class extends UnzipPassThrough { static compression = entry.compression; });
+      entry.ondata = () => {};
+      entry.start();
+      return;
+    }
+    check(!bytes, 'Duplicate root boot.img in firmware ZIP');
+    check(entry.originalSize === undefined || entry.originalSize === PROFILE.stockSize,
+      'Unexpected stock boot.img size in firmware ZIP');
+    check(entry.compression === 0 || entry.compression === 8, 'Unsupported stock boot.img ZIP compression');
+    unzip.register(UnzipPassThrough);
+    unzip.register(UnzipInflate);
+    bytes = new Uint8Array(PROFILE.stockSize);
+    entry.ondata = (error, chunk, final) => {
+      if (error) throw error;
+      check(length + chunk.length <= bytes.length, 'Stock boot.img in firmware ZIP exceeds pinned size');
+      bytes.set(chunk, length);
+      length += chunk.length;
+      if (final) {
+        check(length === bytes.length, 'Truncated stock boot.img in firmware ZIP');
+        complete = true;
+      }
+    };
+    entry.start();
+  });
+  const reader = file.stream().getReader();
+  try {
+    while (!complete) {
+      const { value, done } = await reader.read();
+      if (done) {
+        unzip.push(new Uint8Array(), true);
+        check(complete, 'Firmware ZIP is missing root boot.img');
+        break;
+      }
+      // Bound each inflate call even when a stream supplies large chunks.
+      for (let offset = 0; offset < value.length && !complete; offset += 16384)
+        unzip.push(value.subarray(offset, offset + 16384));
+    }
+    await validateStock(bytes);
+    return bytes;
+  } finally {
+    try { await reader.cancel(); } finally { reader.releaseLock(); }
+  }
 }
 
 function cstring(bytes, start, end) {

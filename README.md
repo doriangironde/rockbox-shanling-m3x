@@ -12,7 +12,7 @@ release, a replacement firmware image, or a ZIP to flash in recovery/Magisk.
   and requirements first. GitHub's automatic source downloads are not installers.
 - **Install, update or roll back:** [installation guide](tools/m3x/INSTALL.md).
 - **Browser installer:** [open the web installer](https://doriangironde.github.io/rockbox-shanling-m3x/) · [source and development notes](web-installer/README.md).
-  Not yet hardware-validated; browser boot-partition writes remain disabled.
+  Not yet hardware-validated; boot-partition writes disabled by default.
 - **Build or contribute:** [development tools](tools/m3x/README.md) and the build steps below.
 - **Understand the hardware limits:** [validation record and remaining checks](M3X_OFFLINE_CHECKLIST.md).
 - **Maintenance review:** [Ponytail findings, fixes and verification](docs/PONYTAIL_REVIEW.md).
@@ -22,7 +22,10 @@ release, a replacement firmware image, or a ZIP to flash in recovery/Magisk.
 
 The supported development setup is **Shanling M3X firmware 1.75, Android 7.1.1
 (API 25), Magisk root and the existing I2C5 GPIO18/19 device-tree audio fix**.
-The released ZIP/CLI installer does not root the player or apply that boot-image fix. Other
+The released ZIP/CLI installer does not root the player or apply that boot-image
+fix. A separate [WebUSB development prototype](web-installer/README.md) adds
+Magisk image preparation and a guarded EDL boot-write/recovery engine; browser
+rooting remains unvalidated and partition writes are disabled by default. Other
 firmware versions have not been validated. Back up the player before changing it.
 
 | Area | Recorded device results | Limits |
@@ -111,6 +114,14 @@ devices, interrupted updates and restoration. Do not flash the installer ZIP.
 
 Choose **Settings → Theme Settings → Browse Themes → m3x-ipod** to select the
 included theme. It has Back/Home and previous/play-pause/next touch controls.
+Volume changes show the current level and a bar in the theme's top strip for
+three seconds, in menus and Now Playing. **Settings → Brightness** opens the
+screen brightness slider with a percentage readout and large **− / +** buttons.
+Drag to preview the level; **Apply** saves it, and **Cancel** restores
+the previous level. The slider keeps a visible minimum (2%) instead of turning
+the screen off. Volume keys adjust brightness while this dialog is open;
+Play applies the change. The saved level is retained across Rockbox launches.
+Pocket mode still keeps the screen dark when using the volume keys.
 
 ![Simulator preview of the M3X menu, settings and playback screen](docs/images/m3x-ipod-preview.png)
 

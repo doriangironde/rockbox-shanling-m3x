@@ -588,6 +588,7 @@ bool option_screen(const struct settings_list *setting,
         }
         else if(default_event_handler(action) == SYS_USB_CONNECTED)
         {
+            gui_synclist_scroll_stop(&lists);
             pop_current_activity();
             return true;
         }
@@ -605,6 +606,7 @@ bool option_screen(const struct settings_list *setting,
         }
 
     }
+    gui_synclist_scroll_stop(&lists);
     pop_current_activity();
     return false;
 }

@@ -46,6 +46,7 @@
 #define FRAMEDROP_TRIGGER 6
 
 void list_draw(struct screen *display, struct gui_synclist *list);
+void list_scroll_stop(struct gui_synclist *list);
 
 static long last_dirty_tick;
 static struct viewport parent[NB_SCREENS];
@@ -67,6 +68,16 @@ void list_init(void)
 {
     last_dirty_tick = current_tick;
     add_event(GUI_EVENT_THEME_CHANGED, list_force_reinit);
+}
+
+void gui_synclist_scroll_stop(struct gui_synclist *lists)
+{
+    if (current_lists == lists)
+        current_lists = NULL;
+#ifdef HAVE_TOUCHSCREEN
+    _gui_synclist_stop_kinetic_scrolling(lists);
+#endif
+    list_scroll_stop(lists);
 }
 
 static void list_init_viewports(struct gui_synclist *list)
@@ -153,6 +164,10 @@ void gui_synclist_init(struct gui_synclist * gui_list,
     int selected_size, struct viewport list_parent[NB_SCREENS]
     )
 {
+    current_lists = NULL;
+#ifdef HAVE_TOUCHSCREEN
+    _gui_synclist_stop_kinetic_scrolling(NULL);
+#endif
     gui_list->callback_get_item_icon = NULL;
     gui_list->callback_get_item_name = callback_get_item_name;
     gui_list->callback_speak_item = NULL;
@@ -606,6 +621,7 @@ static void _lists_uiviewport_update_callback(unsigned short id,
 bool gui_synclist_do_button(struct gui_synclist * lists, int *actionptr)
 {
     int action = *actionptr;
+    current_lists = NULL;
     static bool pgleft_allow_cancel = false;
 
 #ifdef HAVE_WHEEL_ACCELERATION
@@ -645,13 +661,12 @@ bool gui_synclist_do_button(struct gui_synclist * lists, int *actionptr)
 #if defined(HAVE_TOUCHSCREEN)
     if (action == ACTION_TOUCHSCREEN)
         action = *actionptr = gui_synclist_do_touchscreen(lists);
+    if (action == ACTION_REDRAW)
+        _gui_synclist_kinetic_scroll(lists);
     else if (action > ACTION_TOUCHSCREEN_MODE)
-        /* cancel kinetic if we got a normal button event */
         _gui_synclist_stop_kinetic_scrolling(lists);
 #endif
 
-    /* Disable the skin redraw callback */
-    current_lists = NULL;
 
     /* repeat actions block list wraparound */
     bool allow_wrap = lists->wraparound;

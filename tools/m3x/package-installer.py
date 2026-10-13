@@ -64,6 +64,35 @@ def source_files():
         for path in (ROOT / directory).rglob('*'):
             if path.is_file():
                 add(path.relative_to(ROOT).as_posix(), path)
+    # Browser source is part of the public export/corresponding-source archive.
+    # Explicit allowlist: never sweep dependencies, generated captures or user
+    # firmware/programmer/backup files into a privileged installation release.
+    web = ROOT / 'web-installer'
+    for name in ('package.json', 'package-lock.json', 'index.html', 'README.md',
+                 'THIRD_PARTY.md', 'vite.config.js', 'playwright.config.js',
+                 'public/_headers', 'public/third-party-licenses.txt',
+                 'public/recovery.html', 'public/guide.css'):
+        path = web / name
+        if path.is_symlink():
+            raise ValueError('Web source must not be a symlink: ' + name)
+        if path.is_file():
+            add(path.relative_to(ROOT).as_posix(), path)
+    for directory, suffixes in (('src', ('.js', '.css')), ('tests', ('.js',)),
+                                ('scripts', ('.js',))):
+        for path in (web / directory).rglob('*'):
+            if any(part in ('node_modules', 'dist', 'test-results', 'playwright-report')
+                   for part in path.relative_to(web).parts):
+                continue
+            if path.suffix in suffixes:
+                if path.is_symlink():
+                    raise ValueError('Web source must not be a symlink: ' + str(path.relative_to(web)))
+                if path.is_file():
+                    add(path.relative_to(ROOT).as_posix(), path)
+    notice = web / 'LICENSES/qdl.txt'
+    if notice.is_symlink():
+        raise ValueError('Web license notice must not be a symlink')
+    if notice.is_file():
+        add(notice.relative_to(ROOT).as_posix(), notice)
     recorded_modes = ROOT / 'SOURCE-MODES.json'
     if recorded_modes.is_file():
         # Some ZIP extractors discard mode bits; retain archive reproducibility.

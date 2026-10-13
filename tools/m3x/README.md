@@ -23,8 +23,10 @@ results and outstanding checks.
 Driver replays compile real target code against pipes and mock hardware, using
 AddressSanitizer and UndefinedBehaviorSanitizer. They cover input frames and
 locks, battery/sysfs failures, backlight state, PCM format/volume, worker/control
-handoff, USB hotplug and clean return versus physical shutdown. Launcher tests
-use harmless child processes and temporary files rather than stopping Android.
+handoff, USB hotplug and clean return versus physical shutdown. The list replay
+checks GUI-thread kinetic ownership and safe late redraws after list teardown.
+Launcher tests use harmless child processes and temporary files; they also check
+that startup preserves Rockbox's brightness and Android return restores its own.
 
 Shared codec/plugin builds hide private symbols while exposing their loader
 headers. If compiler/linker flags change, use a clean native build: Make does not
@@ -54,12 +56,14 @@ python3 tools/m3x/preview-ipod-theme.py
 
 The first boots the real simulator, selects the licensed test MP3 and captures
 menu/playback images and decoded stereo audio. The second needs Pillow and
-checks theme taps, a scrolling song list, pause/resume and Home. Both use isolated
-temporary disks and file-only audio. Evidence lives in `local/validation/`.
+checks theme taps, fast list swipes, pause/resume, Home, volume feedback and its
+three-second expiry, plus brightness slider limits, drag capture, fine steps,
+Cancel restoration and Apply persistence. Both use isolated temporary disks and
+file-only audio. Evidence lives in `local/validation/`.
 Neither proves Android linking or physical audio quality.
 
 Interactive simulator controls: mouse for touch, Space for play/pause,
-Left/Right for track changes, Up/Down or +/- for volume, and Escape for Power.
++/- for volume, and Escape for Power. Arrow keys emulate touchscreen buttons.
 For a quiet interactive launch:
 
 ```sh

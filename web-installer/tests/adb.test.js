@@ -31,10 +31,31 @@ test('wrong device is refused before requesting any Magisk root permission', asy
   adb.shell = async command => {
     calls.push(command);
     return { code: command.startsWith('pidof') ? 1 : 0,
-      output: command.startsWith('getprop ') ? props[command.slice(8)] : command === 'uname -m' ? 'aarch64' : 'level: 80' };
+      output: command.startsWith('getprop ') ? props[command.slice(8)] : command === 'uname -m' ? 'aarch64' :
+        command === 'cat /sys/devices/soc0/serial_number' ? '305419896' : 'level: 80' };
   };
   await assert.rejects(adb.preflight(), /Unsupported manufacturer/);
   assert(!calls.some(command => command.startsWith('su ')));
+});
+test('ADB binds Sahara to the SoC serial, not the USB serial, and refuses invalid chip identity', async () => {
+  const props = { 'ro.product.manufacturer': 'Shanling', 'ro.product.model': 'Shanling M3X',
+    'ro.build.display.id': '1.75', 'ro.build.version.sdk': '25',
+    'init.svc.zygote': 'running', 'init.svc.surfaceflinger': 'running' };
+  for (const [chip, expected] of [['305419896', '12345678'], ['4294967295', 'ffffffff'],
+    ['0', undefined], ['4294967296', undefined], ['1e3', undefined], ['', undefined]]) {
+    const calls = [], adb = new BrowserAdb({ serial: '87654321' }, {}, () => {});
+    adb.shell = async command => {
+      calls.push(command);
+      return { code: command.startsWith('pidof') || command.startsWith('su ') ? 1 : 0,
+        output: command.startsWith('getprop ') ? props[command.slice(8)] : command === 'uname -m' ? 'aarch64' :
+          command === 'cat /sys/devices/soc0/serial_number' ? chip : 'level: 80' };
+    };
+    if (expected) assert.equal((await adb.preflight()).serial, expected);
+    else {
+      await assert.rejects(adb.preflight());
+      assert(!calls.some(command => command.startsWith('su ')));
+    }
+  }
 });
 test('ADB sync File enum (8, not mode bits) accepted; links/directories refused', async () => {
   for (const type of [LinuxFileType.File, LinuxFileType.Link, LinuxFileType.Directory]) {

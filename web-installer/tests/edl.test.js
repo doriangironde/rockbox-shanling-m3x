@@ -79,6 +79,19 @@ test('Firehose payload changes require stable renegotiation before raw transfers
   assert.equal(hose.payloadSize, 65536); assert.equal(usb.writes.length, 2);
   assert.match(new TextDecoder().decode(usb.writes[1]), /InBytes="65536"/);
 });
+test('full USB packets without a target ZLP still deliver Firehose responses', { timeout: 2000 }, async () => {
+  const xml = '<data><response value="ACK"/></data>';
+  const response = encode('<data>' + ' '.repeat(512 - xml.length) + '<response value="ACK"/></data>');
+  let sent = false;
+  const usb = new EdlUsbTransport({ opened: false, transferIn: async (_, length) => {
+    if (sent || length > response.length) return new Promise(() => {});
+    sent = true;
+    return { status: 'ok', data: new DataView(response.buffer) };
+  } });
+  usb.closed = false; usb.input = { endpointNumber: 1, packetSize: 512 };
+  try { assert.equal((await new Firehose(new ByteStream(usb)).response()).value, 'ACK'); }
+  finally { await usb.close(); }
+});
 test('EDL bulk-out sends explicit ZLP only for exact packet-size multiples', async () => {
   const lengths = [], usb = new EdlUsbTransport({ transferOut: async (_, bytes) => {
     lengths.push(bytes.length); return { status: 'ok', bytesWritten: bytes.length };

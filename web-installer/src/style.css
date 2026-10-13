@@ -40,7 +40,7 @@ html { scroll-padding-top: 6rem; }
 body { margin: 0; background: var(--background); color: var(--text); line-height: 1.5; overflow-y: scroll; }
 a { color: var(--link); text-decoration: none; }
 a:hover { text-decoration: underline; }
-a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible, pre:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+a:focus-visible, button:focus-visible, input:focus-visible, pre:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
 .site-header { background: #212121; color: #ffffff; }
 .site-header nav { max-width: 1080px; margin-inline: auto; }
 .site-header ul { list-style: none; display: flex; flex-wrap: wrap; margin: 0; padding: 0; align-items: stretch; }
@@ -61,9 +61,8 @@ li { margin-block: 0; }
 ul { padding-left: 2.5rem; }
 section { margin-block: 2rem; }
 section h2 { margin-top: 0; }
-details { border-top: 1px solid var(--line); padding-block: .75rem; }
-summary { padding-block: .25rem; font-weight: 700; cursor: pointer; }
-details section:last-child { margin-bottom: .5rem; }
+.secondary-tools { border-top: 1px solid var(--line); padding-top: 1.5rem; }
+.secondary-tools > section:last-child, #rollback-tools > section { margin-bottom: 0; }
 .inline-note, .supporting-text { color: var(--muted); }
 .supporting-text { font-size: .92rem; }
 .warning-text { color: var(--warning); }
@@ -80,6 +79,10 @@ button:hover:not(:disabled) { filter: brightness(.94); }
 button:disabled { background: var(--disabled); color: var(--disabled-text); cursor: not-allowed; }
 .actions { display: flex; flex-wrap: wrap; gap: .4rem .65rem; align-items: flex-start; }
 label { display: block; margin: 1.2rem 0 .45rem; }
+.file-help { margin: 0 0 .65rem; font-size: .92rem; }
+.file-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .4rem .65rem; align-items: start; }
+.file-actions input { min-width: 0; }
+.file-actions button { margin-top: 0; }
 input { font: inherit; accent-color: var(--button); }
 input[type=file], input[type=text] { display: block; width: 100%; max-width: 100%; padding: .7rem .85rem; border: 1px solid var(--line); border-radius: 4px; background: var(--background); color: var(--text); margin-bottom: .65rem; }
 input::file-selector-button { font: inherit; padding: .3rem .6rem; margin-right: .75rem; background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 4px; cursor: pointer; }
@@ -100,4 +103,6 @@ pre { padding: 1rem; border: 1px solid var(--line); border-radius: 4px; white-sp
   h1 { font-size: 2rem; }
   .actions { flex-direction: column; align-items: stretch; }
   .actions button { width: 100%; }
+  .file-actions { grid-template-columns: minmax(0, 1fr); }
+  .file-actions button { justify-self: start; }
 }

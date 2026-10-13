@@ -1,9 +1,10 @@
 # Experimental M3X WebUSB installer / rooting prototype
 
 **Development prototype, not a hardware-validated one-click rooting service.**
-Default builds cannot write boot partitions. No connected player was rebooted,
-rooted or flashed during development. The existing installed Rockbox payload and
-published `dev-bf6af2444b56` release are unchanged.
+Default builds cannot write boot partitions. Real M3X ADB/root/preflight checks and
+read-only EDL reboots have been exercised; no boot partition was flashed during
+browser validation. The installed Rockbox payload and published
+`dev-bf6af2444b56` release are unchanged.
 
 ## Run locally
 
@@ -25,12 +26,12 @@ when WebUSB cannot claim an interface. Browser behavior on those OSes is unteste
 ## Published web installer
 
 [Open the GitHub Pages installer](https://doriangironde.github.io/rockbox-shanling-m3x/).
-The normal installation is five steps: prepare, connect, verify the installer ZIP,
-install, then open Rockbox. It requires an already-rooted M3X with the audio fix.
-Connection help, snapshot rollback and experimental root/EDL tools are collapsed
-by default; their controls and safety checks remain available. The single-column
-guide supports light/dark colors and keyboard navigation, including disclosure
-controls. Styling and the audio-wave icon are original, not GrapheneOS assets.
+The local guide exposes eight steps: files, connection, root preparation, EDL
+backup, guarded root flash, root confirmation, Rockbox installation, and launch.
+Rooting, recovery and file controls are visible without dropdowns. Already-rooted
+players skip rooting. Public builds still disable boot writes pending fresh-stock
+and recovery validation. Light/dark styling and the audio-wave icon are original,
+not GrapheneOS assets.
 
 `.github/workflows/pages.yml` installs the pinned dependencies, runs the unit suite,
 builds `web-installer/dist/` and deploys only that directory on relevant pushes to
@@ -61,9 +62,10 @@ under that account; all content on that origin must be trusted.
   and requires confirmation. Incomplete/disconnected install staging is retained,
   never removed from under a potentially running root process.
 
-Browser ADB interoperability and real device installation are **not yet tested**.
+Browser ADB connection, root detection and the published installer's **check**
+command have passed on a real M3X 1.75. Actual browser installation is not yet
+tested; the CLI installer remains the hardware-tested fallback.
 Unit/browser tests use synthetic USB/ADB adapters and the actual published bundle.
-The CLI installer remains the hardware-tested fallback.
 
 ## Read-only EDL diagnostics on an already-rooted player
 
@@ -93,14 +95,17 @@ The browser implementation mirrors that device-specific path:
 
 1. Start on an **actually unrooted stock M3X 1.75**. A root denial is not proof of
    being unrooted: if Magisk is already present, grant ADB root and skip rooting.
-2. Supply stock `boot.img` extracted from your firmware, the official
-   [Magisk-v30.7.apk](https://github.com/topjohnwu/Magisk/releases/tag/v30.7), and
-   the exact verified `MSM8937.mbn` programmer. Files stay in the browser/device;
-   no upload server exists. Hashes and sizes are pinned.
+2. Use the visible download links for official M3X 1.75 firmware, Magisk 30.7 and
+   the Rockbox installer. Select the firmware ZIP directly: the browser extracts
+   and authenticates only `boot.img`, without inflating unrelated firmware files.
+   **Get programmer** fetches the pinned original upstream file on demand; an
+   offline copy also works. Sizes and full SHA-256 hashes are checked. Firmware
+   extraction, programmer download and stock-image saving passed in a real browser.
 3. Consent to temporary file patching and installation of the official manager.
    Extract Magisk's ARM64 patch tools from the authenticated APK, run official
    `boot_patch.sh` as **unprivileged ADB shell** against a staged regular file,
-   and read `new-boot.img` back. This invocation is **untested on an unrooted M3X**;
+   and read `new-boot.img` back. Official patching as UID 2000 succeeded against
+   the stock file on an already-rooted M3X; this is **not unrooted validation**.
    Magisk/SELinux incompatibility must fail, not fall back to a guessed image.
 4. Verify the patched image retains the exact stock kernel and expected header
    fields and contains a Magisk ramdisk. Modify only the four conflicting
@@ -109,8 +114,9 @@ The browser implementation mirrors that device-specific path:
    the existing dtc-based fix, but its new output has not been boot-tested.
 5. Explicitly consent/click to reboot into EDL; choose EDL USB permission again.
    The SHA-256-pinned programmer is executed in device RAM, not installed to disk.
-   Sahara chip serial must equal the checked ADB serial. Missing/mismatched
-   identity refuses the operation; no USB-ID-only device identification.
+   Sahara chip serial must equal the SoC serial read through unprivileged ADB from
+   `/sys/devices/soc0/serial_number`, not Android's unrelated USB serial.
+   Missing/mismatched identity refuses the operation; no USB-ID-only identification.
 6. Configure verified MSM8937/eMMC, validate primary GPT CRCs and the tested
    partition map, then read the **entire 64 MiB boot partition**. Require exact
    stock 1.75 bytes plus zero padding. Different firmware, previously patched
@@ -207,7 +213,8 @@ package delivery, not malicious installer JavaScript.
 
 - Dedicated trusted HTTPS origin; bundle dependencies locally, pin lockfile.
 - No CDN JS, analytics, service worker, remote command channel or runtime package
-  discovery. Downloads selected locally avoid relying on GitHub release CORS.
+  discovery. Firmware, Magisk and installer files are selected locally. The only
+  external fetch is the explicitly requested, size/hash-pinned original programmer.
 - Strict CSP; serve `X-Content-Type-Options: nosniff`,
   `Content-Security-Policy: ...; frame-ancestors 'none'`, and
   `Permissions-Policy: usb=(self)`. `public/_headers` is an example for hosts that
@@ -216,5 +223,6 @@ package delivery, not malicious installer JavaScript.
   persistence. Disconnect/reload requires fresh authorization. After use revoke
   USB debugging authorization and disable debugging on the player.
 - Stock firmware, patched images, programmer and Magisk APK are **not bundled**.
-  Programmer provenance/redistribution licensing must be resolved before any
-  turnkey downloadable root package. See `THIRD_PARTY.md`.
+  Original download links and local firmware extraction avoid mirroring OEM files.
+  Programmer redistribution rights remain unresolved; do not package it into a
+  downloadable root kit. See `THIRD_PARTY.md`.

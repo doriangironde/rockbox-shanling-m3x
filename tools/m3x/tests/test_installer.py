@@ -392,6 +392,37 @@ class BundleTests(unittest.TestCase):
         spec.loader.exec_module(module)
         return module
 
+    def test_web_source_export_excludes_dependencies_firmware_captures_and_links(self):
+        package = self.load('package-installer')
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            package.ROOT = root
+            for name in ('README.md', 'LICENSE', 'UPSTREAM.md', '.gitignore', 'M3X_OFFLINE_CHECKLIST.md',
+                         'rockbox/main.c', 'web-installer/package.json', 'web-installer/src/main.js',
+                         'web-installer/tests/browser/smoke.spec.js', 'web-installer/public/_headers',
+                         'web-installer/LICENSES/qdl.txt'):
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('public source')
+            for name in ('web-installer/node_modules/private.js', 'web-installer/dist/main.js',
+                         'web-installer/test-results/capture.txt', 'web-installer/boot.img',
+                         'web-installer/MSM8937.mbn', 'web-installer/Magisk.apk',
+                         'web-installer/src/recovery.json', 'web-installer/public/boot.bin',
+                         'web-installer/tests/raw-device-log.txt', 'web-installer/LICENSES/recovery.txt',
+                         'web-installer/src/node_modules/secret.js'):
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('private sentinel')
+            files, _ = package.source_files()
+            self.assertIn('web-installer/src/main.js', files)
+            self.assertIn('web-installer/tests/browser/smoke.spec.js', files)
+            self.assertIn('web-installer/public/_headers', files)
+            self.assertIn('web-installer/LICENSES/qdl.txt', files)
+            self.assertFalse(any(b'private sentinel' in data for data in files.values()))
+            (root / 'web-installer/src/link.js').symlink_to(root / 'web-installer/boot.img')
+            with self.assertRaisesRegex(ValueError, 'must not be a symlink'):
+                package.source_files()
+
     def test_archive_is_deterministic_and_host_verification_detects_corruption(self):
         package = self.load('package-installer')
         installer = self.load('install')

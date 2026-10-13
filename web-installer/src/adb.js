@@ -71,10 +71,14 @@ export class BrowserAdb {
   }
   async preflight() {
     const prop = async name => (await this.shell(`getprop ${name}`)).output.trim();
+    // Android's USB serial is not the Qualcomm chip serial reported by Sahara.
+    const serialText = (await this.shell('cat /sys/devices/soc0/serial_number')).output.trim();
+    const serial = Number(serialText);
+    check(/^[0-9]+$/.test(serialText) && serial > 0 && serial <= 0xffffffff, 'Cannot read a valid Qualcomm chip serial');
     const info = {
       manufacturer: await prop('ro.product.manufacturer'), model: await prop('ro.product.model'),
       firmware: await prop('ro.build.display.id'), api: await prop('ro.build.version.sdk'),
-      arch: (await this.shell('uname -m')).output.trim(), serial: this.adb.serial,
+      arch: (await this.shell('uname -m')).output.trim(), serial: serial.toString(16).padStart(8, '0'),
       androidActive: await prop('init.svc.zygote') === 'running' && await prop('init.svc.surfaceflinger') === 'running',
       rockboxRunning: (await this.shell('pidof rockbox rockbox-dbg', { allowFailure: true })).code === 0,
     };

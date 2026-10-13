@@ -46,6 +46,222 @@
 #include "statusbar.h" /* statusbar_vals enum*/
 #include "rbunicode.h"
 
+#ifdef SHANLING_M3X
+#include <stdio.h>
+#include "backlight.h"
+#include "exported_menus.h"
+#include "kernel.h"
+#include "misc.h"
+#include "scrollbar.h"
+#include "system.h"
+#include "touchscreen.h"
+
+enum
+{
+    BRIGHTNESS_MARGIN = LCD_WIDTH / 16,
+    BRIGHTNESS_SLIDER_X = LCD_WIDTH / 12,
+    BRIGHTNESS_SLIDER_W = LCD_WIDTH * 5 / 6,
+    BRIGHTNESS_SLIDER_Y = LCD_HEIGHT / 3,
+    BRIGHTNESS_TOUCH_H = LCD_HEIGHT / 12,
+    BRIGHTNESS_BUTTON_W = LCD_WIDTH * 3 / 8,
+    BRIGHTNESS_STEP_Y = LCD_HEIGHT / 2,
+    BRIGHTNESS_APPLY_Y = LCD_HEIGHT * 17 / 20,
+    BRIGHTNESS_STEP = (MAX_BRIGHTNESS_SETTING + 10) / 20,
+};
+
+struct m3x_brightness_state
+{
+    struct viewport vp;
+    struct viewport *old_vp;
+    enum touchscreen_mode old_mode;
+    int original;
+    bool closed;
+};
+
+static void m3x_brightness_cleanup(void *data)
+{
+    struct m3x_brightness_state *state = data;
+    if (state->closed)
+        return;
+    state->closed = true;
+    backlight_set_brightness(state->original);
+    action_gesture_reset();
+    touchscreen_set_mode(state->old_mode);
+    lcd_set_viewport(state->old_vp);
+    viewportmanager_theme_undo(SCREEN_MAIN, false);
+    lcd_set_viewport(state->old_vp);
+}
+
+static void m3x_brightness_label(const char *text, int x, int y, int w, int h)
+{
+    int text_w, text_h;
+    lcd_getstringsize(text, &text_w, &text_h);
+    lcd_putsxy(x + (w - text_w) / 2, y + (h - text_h) / 2, text);
+}
+
+static void m3x_brightness_draw(int value)
+{
+    char percent[12];
+    const int right = LCD_WIDTH - BRIGHTNESS_MARGIN - BRIGHTNESS_BUTTON_W;
+    lcd_set_drawmode(DRMODE_SOLID);
+    lcd_clear_viewport();
+    m3x_brightness_label(str(LANG_BRIGHTNESS), 0, BRIGHTNESS_MARGIN,
+                         LCD_WIDTH, BRIGHTNESS_TOUCH_H);
+    snprintf(percent, sizeof(percent), "%d%%",
+             (value * 100 + MAX_BRIGHTNESS_SETTING / 2) / MAX_BRIGHTNESS_SETTING);
+    m3x_brightness_label(percent, 0, LCD_HEIGHT / 5,
+                         LCD_WIDTH, BRIGHTNESS_TOUCH_H);
+
+    lcd_set_foreground(LCD_RGBPACK(43, 106, 177));
+    gui_scrollbar_draw(&screens[SCREEN_MAIN], BRIGHTNESS_SLIDER_X,
+                       BRIGHTNESS_SLIDER_Y - 12, BRIGHTNESS_SLIDER_W, 24,
+                       MAX_BRIGHTNESS_SETTING - MIN_BRIGHTNESS_SETTING,
+                       0, value - MIN_BRIGHTNESS_SETTING, HORIZONTAL);
+    int thumb_x = BRIGHTNESS_SLIDER_X +
+        (value - MIN_BRIGHTNESS_SETTING) * BRIGHTNESS_SLIDER_W /
+        (MAX_BRIGHTNESS_SETTING - MIN_BRIGHTNESS_SETTING);
+    lcd_fillrect(thumb_x - 24, BRIGHTNESS_SLIDER_Y - 32, 48, 64);
+
+    lcd_drawrect(BRIGHTNESS_MARGIN, BRIGHTNESS_STEP_Y,
+                 BRIGHTNESS_BUTTON_W, BRIGHTNESS_TOUCH_H);
+    lcd_drawrect(right, BRIGHTNESS_STEP_Y,
+                 BRIGHTNESS_BUTTON_W, BRIGHTNESS_TOUCH_H);
+    lcd_drawrect(BRIGHTNESS_MARGIN, BRIGHTNESS_APPLY_Y,
+                 BRIGHTNESS_BUTTON_W, BRIGHTNESS_TOUCH_H);
+    lcd_fillrect(right, BRIGHTNESS_APPLY_Y,
+                 BRIGHTNESS_BUTTON_W, BRIGHTNESS_TOUCH_H);
+    lcd_set_foreground(LCD_RGBPACK(32, 32, 32));
+    m3x_brightness_label("-", BRIGHTNESS_MARGIN, BRIGHTNESS_STEP_Y,
+                         BRIGHTNESS_BUTTON_W, BRIGHTNESS_TOUCH_H);
+    m3x_brightness_label("+", right, BRIGHTNESS_STEP_Y,
+                         BRIGHTNESS_BUTTON_W, BRIGHTNESS_TOUCH_H);
+    m3x_brightness_label("Cancel", BRIGHTNESS_MARGIN, BRIGHTNESS_APPLY_Y,
+                         BRIGHTNESS_BUTTON_W, BRIGHTNESS_TOUCH_H);
+    lcd_set_foreground(LCD_RGBPACK(255, 255, 255));
+    lcd_set_drawmode(DRMODE_FG);
+    m3x_brightness_label("Apply", right, BRIGHTNESS_APPLY_Y,
+                         BRIGHTNESS_BUTTON_W, BRIGHTNESS_TOUCH_H);
+    lcd_set_drawmode(DRMODE_SOLID);
+    lcd_set_foreground(LCD_RGBPACK(32, 32, 32));
+    lcd_update_viewport();
+}
+
+static int m3x_brightness_screen(void)
+{
+    struct m3x_brightness_state state = {
+        .old_mode = touchscreen_get_mode(),
+        .original = global_settings.brightness,
+        .closed = false,
+    };
+    int value = state.original;
+    int result = 0;
+    bool redraw = true;
+    state.old_vp = lcd_set_viewport(NULL);
+    viewportmanager_theme_enable(SCREEN_MAIN, false, &state.vp);
+    state.vp.fg_pattern = LCD_RGBPACK(32, 32, 32);
+    state.vp.bg_pattern = LCD_RGBPACK(238, 238, 238);
+    state.vp.flags &= ~VP_FLAG_ALIGNMENT_MASK;
+    lcd_set_viewport(&state.vp);
+    touchscreen_set_mode(TOUCHSCREEN_POINT);
+    action_wait_for_release();
+    action_gesture_reset();
+    if (global_settings.talk_menu)
+    {
+        talk_id(LANG_BRIGHTNESS, false);
+        talk_value((value * 100 + MAX_BRIGHTNESS_SETTING / 2) /
+                   MAX_BRIGHTNESS_SETTING, UNIT_PERCENT, true);
+    }
+
+    while (!state.closed)
+    {
+        if (redraw)
+        {
+            m3x_brightness_draw(value);
+            redraw = false;
+        }
+        int action = get_action(CONTEXT_SETTINGS, TIMEOUT_BLOCK);
+        int next = value;
+        if (action == ACTION_TOUCHSCREEN)
+        {
+            struct gesture_event ev;
+            if (!action_gesture_get_event_in_vp(&ev, &state.vp))
+                continue;
+            /* Capture by the press origin, including releases over buttons. */
+            if (ev.ox >= BRIGHTNESS_SLIDER_X &&
+                ev.ox <= BRIGHTNESS_SLIDER_X + BRIGHTNESS_SLIDER_W &&
+                ev.oy >= BRIGHTNESS_SLIDER_Y - BRIGHTNESS_TOUCH_H / 2 &&
+                ev.oy < BRIGHTNESS_SLIDER_Y + BRIGHTNESS_TOUCH_H / 2)
+            {
+                int x = MAX(0, MIN(BRIGHTNESS_SLIDER_W,
+                                   ev.x - BRIGHTNESS_SLIDER_X));
+                next = MIN_BRIGHTNESS_SETTING +
+                    (x * (MAX_BRIGHTNESS_SETTING - MIN_BRIGHTNESS_SETTING) +
+                     BRIGHTNESS_SLIDER_W / 2) / BRIGHTNESS_SLIDER_W;
+            }
+            else if (ev.id == GESTURE_TAP)
+            {
+                int right = LCD_WIDTH - BRIGHTNESS_MARGIN - BRIGHTNESS_BUTTON_W;
+                bool left_button = ev.x >= BRIGHTNESS_MARGIN &&
+                    ev.x < BRIGHTNESS_MARGIN + BRIGHTNESS_BUTTON_W;
+                bool right_button = ev.x >= right &&
+                    ev.x < right + BRIGHTNESS_BUTTON_W;
+                if (ev.y >= BRIGHTNESS_STEP_Y &&
+                    ev.y < BRIGHTNESS_STEP_Y + BRIGHTNESS_TOUCH_H)
+                {
+                    if (left_button) action = ACTION_SETTINGS_DEC;
+                    if (right_button) action = ACTION_SETTINGS_INC;
+                }
+                else if (ev.y >= BRIGHTNESS_APPLY_Y &&
+                         ev.y < BRIGHTNESS_APPLY_Y + BRIGHTNESS_TOUCH_H)
+                {
+                    if (left_button) action = ACTION_STD_CANCEL;
+                    if (right_button) action = ACTION_STD_OK;
+                }
+            }
+        }
+        switch (action)
+        {
+            case ACTION_SETTINGS_INC:
+            case ACTION_SETTINGS_INCREPEAT:
+                next = MIN(MAX_BRIGHTNESS_SETTING, value + BRIGHTNESS_STEP);
+                break;
+            case ACTION_SETTINGS_DEC:
+            case ACTION_SETTINGS_DECREPEAT:
+                next = MAX(MIN_BRIGHTNESS_SETTING, value - BRIGHTNESS_STEP);
+                break;
+            case ACTION_STD_OK:
+                global_settings.brightness = value;
+                state.original = value;
+                settings_save();
+                goto exit;
+            case ACTION_STD_CANCEL:
+                goto exit;
+            case ACTION_REDRAW:
+                redraw = true;
+                break;
+            default:
+                if (default_event_handler_ex(action, m3x_brightness_cleanup,
+                                             &state) == SYS_USB_CONNECTED)
+                    result = 1;
+                break;
+        }
+        if (next != value)
+        {
+            value = next;
+            backlight_set_brightness(value);
+            redraw = true;
+            if (global_settings.talk_menu &&
+                (action != ACTION_TOUCHSCREEN || !action_gesture_is_pressed()))
+                talk_value((value * 100 + MAX_BRIGHTNESS_SETTING / 2) /
+                           MAX_BRIGHTNESS_SETTING, UNIT_PERCENT, false);
+        }
+    }
+exit:
+    m3x_brightness_cleanup(&state);
+    return result;
+}
+#endif
+
 #ifdef HAVE_BACKLIGHT
 static int selectivebacklight_callback(int action,
                                        const struct menu_item_ex *this_item,
@@ -178,7 +394,12 @@ MENUITEM_SETTING(lcd_sleep_after_backlight_off,
                 &global_settings.lcd_sleep_after_backlight_off, NULL);
 #endif
 #ifdef HAVE_BACKLIGHT_BRIGHTNESS
+#ifdef SHANLING_M3X
+MENUITEM_FUNCTION(brightness_item, 0, ID2P(LANG_BRIGHTNESS),
+                  m3x_brightness_screen, NULL, Icon_Menu_setting);
+#else
 MENUITEM_SETTING(brightness_item, &global_settings.brightness, NULL);
+#endif
 #endif
 #ifdef HAVE_COMPOSITE_VIDEO_OUT
 MENUITEM_SETTING(composite_video_output,

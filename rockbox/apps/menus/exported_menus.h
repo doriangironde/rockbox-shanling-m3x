@@ -50,5 +50,9 @@ struct browse_folder_info {
 };
 int browse_folder(void *param); /* in theme_menu.c as it is mostly used there */
 
+#ifdef SHANLING_M3X
+extern const struct menu_item_ex brightness_item;
+#endif
+
 #endif /* ! PLUGIN */
 #endif /*_EXPORTED_MENUS_H */

@@ -147,7 +147,6 @@ sleep 12
 kill -0 "$RB" 2>/dev/null || exit 1
 "$FB" --blank 0 >> "$LOG" 2>&1 || exit 1
 "$FB" --pan 0 >> "$LOG" 2>&1 || exit 1
-echo 200 > /sys/class/leds/lcd-backlight/brightness
 log "initial blank+pan done"
 
 wait "$RB"

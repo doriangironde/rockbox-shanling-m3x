@@ -5,6 +5,7 @@ import { ByteStream, EdlUsbTransport, Firehose, loadProgrammer } from './edl.js'
 import { RootWorkflow } from './root-workflow.js';
 import { PROFILE, RELEASE, confirmationFor, requireCondition as check, sha256 } from './profile.js';
 import { parseGpt } from './gpt.js';
+import { stockBootFile } from './images.js';
 
 const $ = id => document.getElementById(id);
 const writesEnabled = import.meta.env.VITE_M3X_ENABLE_EDL_WRITES === '1';
@@ -12,7 +13,7 @@ let adb, root, edl, context, programmer, diagnosticContext, diagnosticBackup, bu
 const file = id => $(id).files[0];
 const log = value => { $('log').textContent = ($('log').textContent + value + '\n').slice(-131072); $('log').scrollTop = $('log').scrollHeight; };
 const progress = value => { $('progress').value = value; };
-$('release-link').href = RELEASE.page;
+$('release-link').href = RELEASE.page.replace('/tag/', '/download/') + `/Rockbox-M3X-${RELEASE.id}-installer.zip`;
 const supported = !!navigator.usb && window.isSecureContext;
 $('compatibility').textContent = supported ? 'USB connection available.' :
   'USB unavailable. Use desktop Chrome/Edge over HTTPS or localhost, or use the CLI installer.';
@@ -25,6 +26,8 @@ function update() {
   const enable = (id, condition) => { $(id).disabled = busy || !condition; };
   enable('connect', supported && !adb && !edl);
   enable('disconnect', adb || edl);
+  enable('get-programmer', window.isSecureContext && !root);
+  enable('extract-boot', window.isSecureContext && file('stock-file'));
   enable('check-install', adb && context?.rooted && file('installer-file'));
   enable('install', adb && context?.rooted && file('installer-file') && $('install-consent').checked);
   enable('rollback', adb && context?.rooted && $('rollback-name').value.trim());
@@ -37,7 +40,7 @@ function update() {
   enable('diagnostic-read', supported && !root && !edl && (diagnosticContext || context) &&
     file('programmer-file') && $('edl-consent').checked);
   enable('save-backup', root?.metadata.backupSha256 || diagnosticBackup);
-  enable('verify-backup', (inspected || backedUp) && file('backup-file'));
+  enable('verify-backup', ((inspected || backedUp) || diagnosticBackup) && file('backup-file'));
   enable('flash', writesEnabled && backedUp && edl && $('flash-risk').checked &&
     $('flash-confirmation').value === confirmationFor(root.metadata.imageSha256));
   enable('restore-boot', writesEnabled && edl && root?.metadata.backupSha256 &&
@@ -61,6 +64,18 @@ async function bytes(id, max) {
   const selected = file(id); check(selected && selected.size <= max, 'Missing/oversized file: ' + id);
   return new Uint8Array(await selected.arrayBuffer());
 }
+async function stockBytes() {
+  check(file('stock-file'), 'Select the M3X 1.75 firmware ZIP or stock boot.img');
+  $('stock-status').textContent = 'Extracting and verifying stock boot.img locally…';
+  try {
+    const stock = await stockBootFile(file('stock-file'));
+    $('stock-status').textContent = 'Verified stock boot.img — M3X firmware 1.75.';
+    return stock;
+  } catch (error) {
+    $('stock-status').textContent = error.message;
+    throw error;
+  }
+}
 function download(name, data, type = 'application/octet-stream') {
   const url = URL.createObjectURL(new Blob([data], { type })), link = document.createElement('a');
   link.href = url; link.download = name; link.click(); setTimeout(() => URL.revokeObjectURL(url), 60000);
@@ -70,6 +85,30 @@ function showRootMetadata() {
   if (root.metadata.backupSha256) $('restore-phrase').textContent = 'Restore phrase: ' + confirmationFor(root.metadata.backupSha256, true);
 }
 
+bind('extract-boot', 'Extracting verified stock boot.img', async () => {
+  download('boot.img', await stockBytes());
+});
+bind('get-programmer', 'Getting the verified Qualcomm programmer', async () => {
+  const response = await fetch('https://raw.githubusercontent.com/thantoeaungat/firehose/56bd8a3d54f9dc69ddf59ee486c557b8cb25cd05/Dongle%20Firehose/Qcom/BOOT/MSM8937.mbn');
+  check(response.ok && response.body, 'Programmer download failed; select your verified offline copy');
+  const reader = response.body.getReader(), data = new Uint8Array(PROFILE.programmerSize);
+  let length = 0;
+  try {
+    for (;;) {
+      const { value, done } = await reader.read(); if (done) break;
+      check(value.length <= data.length - length, 'Programmer download exceeds the verified size');
+      data.set(value, length); length += value.length;
+    }
+  } finally { await reader.cancel(); reader.releaseLock(); }
+  check(length === data.length && await sha256(data) === PROFILE.programmerSha256, 'Incorrect Firehose programmer');
+  const selected = new DataTransfer();
+  selected.items.add(new File([data], 'MSM8937.mbn', { type: 'application/octet-stream' }));
+  $('programmer-file').files = selected.files;
+  log('Verified programmer selected. Downloaded from its original upstream, not mirrored here.');
+});
+$('stock-file').addEventListener('change', () => {
+  $('stock-status').textContent = file('stock-file') ? 'Selected. Boot image will be extracted and verified locally.' : 'No stock firmware selected.';
+});
 bind('connect', 'Connecting and checking M3X', async () => {
   root = undefined; programmer = undefined; context = undefined; diagnosticContext = undefined; diagnosticBackup = undefined;
   for (const checkbox of document.querySelectorAll('input[type=checkbox]')) checkbox.checked = false;
@@ -78,7 +117,7 @@ bind('connect', 'Connecting and checking M3X', async () => {
   try { context = await adb.preflight(); }
   catch (error) { await adb.close(); adb = undefined; context = undefined; throw error; }
   $('device-status').textContent = `${context.model}, firmware ${context.firmware}, battery ${context.battery}%. ` +
-    (context.rooted ? 'Root available. Continue to step 3.' : 'Root unavailable/denied. Installation requires Magisk root; check its ADB permissions if already rooted.');
+    (context.rooted ? 'Root available. Skip rooting and continue to step 7.' : 'Root unavailable/denied. If this is stock, continue to step 3; if Magisk is already installed, grant ADB root instead of re-rooting.');
   const connected = adb;
   connected.adb.disconnected.then(() => {
     if (adb === connected) { connected.credentials.forget(); adb = undefined; $('device-status').textContent = 'ADB disconnected; reconnect explicitly.'; update(); }
@@ -111,7 +150,7 @@ bind('rollback', 'Restoring Rockbox installation snapshot', async () => {
 });
 bind('prepare-root', 'Preparing Magisk + audio-fix image; no partition write', async () => {
   check($('prepare-consent').checked, 'Preparation consent required');
-  const stock = await bytes('stock-file', PROFILE.stockSize);
+  const stock = await stockBytes();
   programmer = await bytes('programmer-file', PROFILE.programmerSize);
   check(programmer.length === PROFILE.programmerSize && await sha256(programmer) === PROFILE.programmerSha256,
     'Incorrect Firehose programmer');
@@ -135,6 +174,7 @@ bind('connect-edl', 'Checking EDL identity, GPT and full stock boot', async () =
   edl = await EdlUsbTransport.request();
   const stream = new ByteStream(edl);
   await loadProgrammer(stream, programmer, root.context.serial);
+  await edl.close(); await edl.open();
   root.firehose = new Firehose(stream, log);
   await root.inspect(progress); showRootMetadata();
   log('Full stock boot verified. Save backup and reopen it before any flash.');
@@ -156,6 +196,7 @@ bind('diagnostic-read', 'Read-only EDL identity / GPT / complete boot backup', a
   if (adb) { const closing = adb; adb = undefined; await closing.close(); }
   edl = await EdlUsbTransport.request(); const stream = new ByteStream(edl);
   await loadProgrammer(stream, candidate, diagnosticContext.serial);
+  await edl.close(); await edl.open();
   const hose = new Firehose(stream, log); await hose.configure();
   const table = parseGpt(await hose.read(0, 34));
   const backup = await hose.read(PROFILE.bootStart, PROFILE.bootSectors, progress);
@@ -173,7 +214,14 @@ bind('save-backup', 'Saving full boot recovery backup', async () => {
   log('Save BOTH downloads. Recovery record contains device identity; keep it private. Reopen saved boot file below.');
 });
 bind('verify-backup', 'Verifying saved/reopened boot backup', async () => {
-  await root.verifySavedBackup(await bytes('backup-file', PROFILE.bootSectors * 512)); showRootMetadata();
+  const saved = await bytes('backup-file', PROFILE.bootSectors * 512);
+  if (root) { await root.verifySavedBackup(saved); showRootMetadata(); }
+  else {
+    check(diagnosticBackup && saved.length === PROFILE.bootSectors * 512 &&
+      await sha256(saved) === diagnosticBackup.metadata.backupSha256,
+      'Saved/reopened backup does not match the actual device read');
+    log('Saved/reopened boot backup verified. No root write authorization created.');
+  }
 });
 bind('flash', 'Writing boot only, then verifying full readback', async () => {
   await root.flash({ phrase: $('flash-confirmation').value, riskAccepted: $('flash-risk').checked }, progress);

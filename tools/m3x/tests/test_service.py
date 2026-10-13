@@ -13,7 +13,8 @@ ROOT = Path(__file__).resolve().parents[3]
 class ServiceTests(unittest.TestCase):
     def run_service(self, cpu="35", battery="25000", disabled=False, later=None,
                     runtime_state="stopped", display_state="stopped", child_exit=0,
-                    already_running=False, bootanim_state="stopped", bootanimation_running=False):
+                    already_running=False, bootanim_state="stopped", bootanimation_running=False,
+                    child_brightness=None):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
             mod = base / "module"
@@ -55,7 +56,12 @@ class ServiceTests(unittest.TestCase):
             executable(commands / "sleep", '/bin/sleep 0.02\n')
             # Leave ample time for the monitor under parallel compiler load.
             lifetime = 3 if later else 0.25
-            executable(mod / "rockbox", f'echo launch >> "{log}"\n/bin/sleep {lifetime}\nexit {child_exit}\n')
+            set_brightness = (f'echo {child_brightness} > "{light / "brightness"}"\n'
+                              if child_brightness is not None else "")
+            executable(mod / "rockbox", f'echo launch >> "{log}"\n{set_brightness}'
+                       f'/bin/sleep {lifetime}\n'
+                       f'echo player-brightness "$(cat "{light / "brightness"}")" >> "{log}"\n'
+                       f'exit {child_exit}\n')
             executable(mod / "fbpan", f'echo fbpan "$@" >> "{log}"\n')
             source = (ROOT / "m3x-module/service.sh").read_text()
             source = source.replace("/sys/", f"{sysfs}/")
@@ -148,6 +154,11 @@ class ServiceTests(unittest.TestCase):
         self.assertLess(calls.index("start surfaceflinger"), calls.index("start zygote"))
         self.assertTrue(disabled)
         self.assertEqual((brightness, unlock), ("123", "rockbox"))
+
+    def test_startup_keeps_player_brightness_until_android_return(self):
+        calls, _, _, brightness, _ = self.run_service(child_brightness=37)
+        self.assertIn("player-brightness 37\n", calls)
+        self.assertEqual(brightness, "123")
 
     def test_hot_or_missing_sensor_prevents_start(self):
         for cpu, battery in (("55", "25000"), ("35", "40000"), ("", "25000"), ("bad", "25000")):

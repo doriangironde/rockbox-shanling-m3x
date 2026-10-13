@@ -147,7 +147,8 @@ export class Firehose {
       check(/^[A-Za-z_][A-Za-z_0-9]*$/.test(key) && /^[A-Za-z0-9._-]+$/.test(String(value)), 'Unsafe command attribute');
       return `${key}="${value}"`;
     }).join(' ');
-    await this.stream.transport.write(encoder.encode(`<?xml version="1.0" ?><data><${tag} ${fields}/></data>`));
+    // Use the same newline-terminated XML as the hardware-tested native QDL client.
+    await this.stream.transport.write(encoder.encode(`<?xml version="1.0"?>\n<data><${tag} ${fields}/></data>\n`));
   }
   async configure() {
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -199,7 +200,7 @@ export class EdlUsbTransport {
     try { await transport.open(); } catch (error) { await transport.close(); throw error; }
     return transport;
   }
-  constructor(device) { this.device = device; this.queue = []; this.waiter = undefined; this.closed = true; this.queued = 0; }
+  constructor(device) { this.device = device; this.closed = true; }
   async open() {
     check(this.device.vendorId === PROFILE.edlVendor && this.device.productId === PROFILE.edlProduct, 'Not Qualcomm EDL');
     await this.device.open();
@@ -212,37 +213,35 @@ export class EdlUsbTransport {
     const { iface, alt } = choices[0]; this.interface = iface.interfaceNumber;
     this.input = alt.endpoints.find(e => e.direction === 'in' && e.type === 'bulk');
     this.output = alt.endpoints.find(e => e.direction === 'out' && e.type === 'bulk');
-    check(Number.isInteger(this.output.packetSize) && this.output.packetSize > 0 && this.output.packetSize <= 1024,
+    check(Number.isInteger(this.input.packetSize) && this.input.packetSize > 0 && this.input.packetSize <= 1024 &&
+      Number.isInteger(this.output.packetSize) && this.output.packetSize > 0 && this.output.packetSize <= 1024,
       'Invalid EDL endpoint packet size');
     await this.device.claimInterface(this.interface);
     if (iface.alternate.alternateSetting !== alt.alternateSetting)
       await this.device.selectAlternateInterface(this.interface, alt.alternateSetting);
-    this.closed = false; this.pump();
-  }
-  async pump() {
-    try {
-      while (!this.closed) {
-        const result = await this.device.transferIn(this.input.endpointNumber, 65536);
-        check(result.status === 'ok' && result.data, 'EDL bulk-in transfer failed');
-        const bytes = new Uint8Array(result.data.buffer, result.data.byteOffset, result.data.byteLength).slice();
-        if (!bytes.length) continue; // USB ZLP, not EOF.
-        this.queued += bytes.length;
-        check(this.queued <= 8 * 1024 * 1024, 'EDL receive queue limit exceeded');
-        this.queue.push(bytes); this.waiter?.(); this.waiter = undefined;
-      }
-    } catch (error) { if (!this.closed) { this.error = error; await this.close(); } }
+    this.closed = false;
   }
   async read() {
-    if (!this.queue.length && !this.closed) {
-      await new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-          this.error = new Error('EDL receive timeout; no automatic retry/reboot'); this.close(); reject(this.error);
-        }, 30000);
-        this.waiter = () => { clearTimeout(timer); resolve(); };
-      });
-    }
-    check(this.queue.length > 0, this.error?.message ?? 'EDL disconnected');
-    const out = this.queue.shift(); this.queued -= out.length; return out;
+    check(!this.closed, 'EDL disconnected');
+    let timer;
+    try {
+      return await Promise.race([
+        (async () => {
+          // Do not leave a Sahara receive pending across the programmer handoff.
+          while (!this.closed) {
+            const result = await this.device.transferIn(this.input.endpointNumber, this.input.packetSize);
+            check(result.status === 'ok' && result.data, 'EDL bulk-in transfer failed');
+            const bytes = new Uint8Array(result.data.buffer, result.data.byteOffset, result.data.byteLength);
+            if (bytes.length) return bytes; // USB ZLP, not EOF.
+          }
+          throw new Error('EDL disconnected');
+        })(),
+        new Promise((_, reject) => { timer = setTimeout(() => {
+          reject(new Error('EDL receive timeout; no automatic retry/reboot'));
+        }, 30000); }),
+      ]);
+    } catch (error) { await this.close(); throw error; }
+    finally { clearTimeout(timer); }
   }
   async write(bytes) {
     check(!this.closed, 'EDL disconnected');
@@ -268,7 +267,7 @@ export class EdlUsbTransport {
     } finally { clearTimeout(timer); }
   }
   async close() {
-    this.closed = true; this.waiter?.(); this.waiter = undefined;
+    this.closed = true;
     if (this.device.opened) { try { await this.device.close(); } catch { /* physical disconnect */ } }
   }
 }

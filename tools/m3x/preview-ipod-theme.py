@@ -32,7 +32,7 @@ with tempfile.TemporaryDirectory(prefix="m3x-ipod-") as directory:
         control.unlink()
     settings = (disk / ".rockbox/themes/m3x-ipod.cfg").read_text()
     settings += ("resume on startup: off\nstart in screen: root\nvoice menus: off\n"
-                 "touchscreen mode: point\nvolume: -30\nbacklight timeout: on\n")
+                 "touchscreen mode: point\nvolume: -30\nbrightness: 200\nbacklight timeout: on\n")
     (disk / ".rockbox/config.cfg").write_text(settings)
     (disk / "Music").mkdir()
     for number in range(1, 26):
@@ -47,10 +47,16 @@ with tempfile.TemporaryDirectory(prefix="m3x-ipod-") as directory:
                SDL_DISKAUDIOFILE=str(capture), M3X_SMOKE_IPOD="1",
                DYLD_INSERT_LIBRARIES=str(helper))
     result = subprocess.run([str(BUILD / "rockboxui"), "--nobackground", "--root", str(disk)],
-                            cwd=base, env=env, capture_output=True, text=True, timeout=40)
+                            cwd=base, env=env, capture_output=True, text=True, timeout=60)
     (OUT / "run.txt").write_text(result.stdout + result.stderr)
     dumps = sorted(disk.glob("dump_*.bmp"))
-    names = ("menu", "settings", "library", "scrolled", "playing", "paused", "home")
+    names = ("menu", "menu-volume-up", "menu-volume-down", "menu-volume-hidden",
+             "settings", "brightness", "brightness-max", "brightness-min",
+             "brightness-drag-outside", "brightness-cancelled", "brightness-step-up",
+             "brightness-adjusted", "brightness-saved", "brightness-reopened",
+             "library", "scrolled", "fast-scrolled",
+             "playing", "playing-volume-up", "playing-volume-down",
+             "playing-volume-hidden", "paused", "home")
     for source, name in zip(dumps, names):
         with Image.open(source) as im:
             assert im.size == (768, 1280)
@@ -65,6 +71,30 @@ with tempfile.TemporaryDirectory(prefix="m3x-ipod-") as directory:
         assert sum(a != b for a, b in zip(before_digits, after_digits)) > 20, "Swipe did not move the file list"
     with Image.open(OUT / "playing.png") as playing, Image.open(OUT / "paused.png") as paused:
         assert playing.crop((334,1082,434,1172)).tobytes() != paused.crop((334,1082,434,1172)).tobytes(), "Pause did not change playback state"
+    for screen in ("menu", "playing"):
+        with Image.open(OUT / f"{screen}.png") as initial, \
+             Image.open(OUT / f"{screen}-volume-up.png") as up, \
+             Image.open(OUT / f"{screen}-volume-down.png") as down, \
+             Image.open(OUT / f"{screen}-volume-hidden.png") as hidden:
+            area = (224, 4, 608, 52)
+            assert up.crop(area).tobytes() != initial.crop(area).tobytes(), "Volume indicator missing"
+            assert down.crop(area).tobytes() != up.crop(area).tobytes(), "Volume indicator did not update"
+            assert hidden.crop(area).tobytes() == initial.crop(area).tobytes(), "Volume indicator did not expire"
+    saved = (disk / ".rockbox/config.cfg.new").read_text()
+    assert "brightness: 130\n" in saved, "Brightness was not changed and saved"
+    for before_name, after_name in (("brightness", "brightness-cancelled"),
+                                   ("brightness-adjusted", "brightness-reopened")):
+        with Image.open(OUT / f"{before_name}.png") as before, \
+             Image.open(OUT / f"{after_name}.png") as after:
+            assert before.tobytes() == after.tobytes(), "Cancel or Apply lost the brightness value"
+    with Image.open(OUT / "brightness.png") as before, \
+         Image.open(OUT / "brightness-drag-outside.png") as after:
+        buttons = (48, 1088, 720, 1194)
+        assert before.crop(buttons).tobytes() == after.crop(buttons).tobytes(), "A slider drag activated Apply"
+    with Image.open(OUT / "brightness-max.png") as maximum, \
+         Image.open(OUT / "brightness-min.png") as minimum:
+        slider = (48, 373, 720, 479)
+        assert maximum.crop(slider).tobytes() != minimum.crop(slider).tobytes(), "Slider did not reach both limits"
     samples = array.array("h", capture.read_bytes())
     assert len(samples) > 44100 * 2 and any(samples), "No decoded audio captured"
     assert (disk / ".rockbox/.playlist_control").stat().st_size > 0
